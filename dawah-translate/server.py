@@ -24,9 +24,6 @@ from config import JOBS_DIR, STATIC_DIR, GLOSSARY_PATH, JOB_MAX_AGE_DAYS
 
 app = FastAPI(title="Dawah-Translate", version="1.0")
 
-# Serve static files
-app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
-
 
 # ── Models ────────────────────────────────────────────────────────────
 
@@ -535,6 +532,9 @@ async def lifespan(app):
     yield
 
 app.router.lifespan_context = lifespan
+
+# ── Static files (mounted last so explicit routes take priority) ─────
+app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 
 # ── Run ───────────────────────────────────────────────────────────────
