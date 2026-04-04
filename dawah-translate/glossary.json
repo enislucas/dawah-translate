@@ -1,0 +1,72 @@
+{
+  "صلاة": {
+    "transliteration": "Salah",
+    "ro_explanation": "rugăciunea rituală",
+    "rule": "First occurrence: 'Salah (rugăciunea rituală)'. After: just 'Salah'."
+  },
+  "دعاء": {
+    "transliteration": "du'a",
+    "ro_explanation": "invocație",
+    "rule": "First occurrence: 'du'a (invocație)'. After: just 'du'a'."
+  },
+  "زكاة": {
+    "transliteration": "Zakah",
+    "ro_explanation": "dania obligatorie",
+    "rule": "First occurrence: 'Zakah (dania obligatorie)'. After: just 'Zakah'."
+  },
+  "توحيد": {
+    "transliteration": "Tawheed",
+    "ro_explanation": "unicitatea lui Dumnezeu",
+    "rule": "First occurrence: 'Tawheed (unicitatea lui Dumnezeu)'. After: just 'Tawheed'."
+  },
+  "شرك": {
+    "transliteration": "shirk",
+    "ro_explanation": "asociere",
+    "rule": "First occurrence: 'shirk (asociere)'. After: just 'shirk'."
+  },
+  "سنة": {
+    "transliteration": "Sunnah",
+    "ro_explanation": "",
+    "rule": "Always 'Sunnah'."
+  },
+  "حديث": {
+    "transliteration": "hadith",
+    "ro_explanation": "",
+    "rule": "Always 'hadith'."
+  },
+  "إن شاء الله": {
+    "transliteration": "in shaa Allah",
+    "ro_explanation": "",
+    "rule": "Keep transliterated. Never translate."
+  },
+  "سبحان الله": {
+    "transliteration": "SubhanAllah",
+    "ro_explanation": "",
+    "rule": "Keep transliterated. Never translate."
+  },
+  "الحمد لله": {
+    "transliteration": "Alhamdulillah",
+    "ro_explanation": "",
+    "rule": "Keep transliterated. Never translate."
+  },
+  "الله أكبر": {
+    "transliteration": "Allahu Akbar",
+    "ro_explanation": "",
+    "rule": "Keep transliterated. Never translate."
+  },
+  "تقوى": {
+    "transliteration": "taqwa",
+    "ro_explanation": "conștiința lui Dumnezeu",
+    "rule": "First occurrence: 'taqwa (conștiința lui Dumnezeu)'. After: just 'taqwa'."
+  },
+  "فقه": {
+    "transliteration": "fiqh",
+    "ro_explanation": "jurisprudență islamică",
+    "rule": "First occurrence: 'fiqh (jurisprudență islamică)'. After: just 'fiqh'."
+  },
+  "عقيدة": {
+    "transliteration": "aqeedah",
+    "ro_explanation": "credință",
+    "rule": "First occurrence: 'aqeedah (credință)'. After: just 'aqeedah'."
+  }
+}

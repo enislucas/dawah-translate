@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Architecture — Dawah-Translate</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background: #0f172a;
+            color: #e2e8f0;
+            min-height: 100vh;
+            line-height: 1.7;
+        }
+        .container { max-width: 1000px; margin: 0 auto; padding: 2rem; }
+
+        nav {
+            background: #1e293b;
+            border-bottom: 1px solid #334155;
+            padding: 0.75rem 2rem;
+            display: flex;
+            align-items: center;
+            gap: 2rem;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        nav a { color: #94a3b8; text-decoration: none; font-size: 0.9rem; transition: color 0.2s; }
+        nav a:hover, nav a.active { color: #3b82f6; }
+        nav .brand { font-weight: 700; font-size: 1.1rem; color: #f8fafc; margin-right: auto; }
+
+        h1 { font-size: 2.2rem; margin-bottom: 0.5rem; color: #f8fafc; }
+        h2 { font-size: 1.5rem; margin: 2.5rem 0 1rem; color: #f8fafc; border-bottom: 1px solid #334155; padding-bottom: 0.5rem; }
+        h3 { font-size: 1.15rem; margin: 1.5rem 0 0.5rem; color: #cbd5e1; }
+        .subtitle { color: #94a3b8; margin-bottom: 2rem; font-size: 1.05rem; }
+        p { margin-bottom: 1rem; color: #cbd5e1; }
+        strong { color: #f1f5f9; }
+        code { background: #1e293b; padding: 0.15rem 0.4rem; border-radius: 4px; font-size: 0.9em; color: #7dd3fc; }
+        a { color: #3b82f6; }
+        ul { margin: 0.5rem 0 1.5rem 1.5rem; color: #cbd5e1; }
+        li { margin-bottom: 0.3rem; }
+
+        /* Diagram container */
+        .diagram-container {
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 12px;
+            padding: 2rem;
+            margin: 1.5rem 0;
+            overflow-x: auto;
+        }
+        .diagram-container svg { display: block; margin: 0 auto; max-width: 100%; }
+        .diagram-label {
+            text-align: center;
+            color: #64748b;
+            font-size: 0.8rem;
+            margin-top: 0.5rem;
+            font-style: italic;
+        }
+
+        /* Component cards */
+        .component-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1.5rem;
+            margin: 1.5rem 0;
+        }
+        .component {
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 12px;
+            padding: 1.5rem;
+            border-top: 3px solid #3b82f6;
+        }
+        .component h3 {
+            margin-top: 0;
+            color: #f8fafc;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .component .file { font-family: monospace; font-size: 0.8rem; color: #7dd3fc; margin-bottom: 0.5rem; }
+        .component p { font-size: 0.9rem; color: #94a3b8; margin-bottom: 0.5rem; }
+        .component ul { margin: 0.5rem 0 0 1.25rem; font-size: 0.85rem; }
+        .component .tag {
+            display: inline-block;
+            padding: 0.15rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            margin-right: 0.3rem;
+        }
+        .tag.input { background: #1e3a5f; color: #60a5fa; }
+        .tag.output { background: #14532d; color: #4ade80; }
+        .tag.tool { background: #3b1f3b; color: #c084fc; }
+
+        /* Flow diagram in pure CSS/HTML */
+        .flow {
+            display: flex;
+            align-items: center;
+            gap: 0;
+            overflow-x: auto;
+            padding: 1rem 0;
+        }
+        .flow-step {
+            background: #1e293b;
+            border: 2px solid #334155;
+            border-radius: 12px;
+            padding: 1rem 1.25rem;
+            min-width: 160px;
+            text-align: center;
+            flex-shrink: 0;
+        }
+        .flow-step.active { border-color: #3b82f6; box-shadow: 0 0 15px rgba(59, 130, 246, 0.2); }
+        .flow-step .step-name { font-weight: 700; color: #f8fafc; font-size: 0.95rem; }
+        .flow-step .step-tool { color: #7dd3fc; font-size: 0.75rem; font-family: monospace; margin-top: 0.25rem; }
+        .flow-step .step-output { color: #4ade80; font-size: 0.75rem; margin-top: 0.25rem; }
+        .flow-arrow {
+            color: #475569;
+            font-size: 1.5rem;
+            padding: 0 0.5rem;
+            flex-shrink: 0;
+        }
+        .flow-human {
+            background: #1e293b;
+            border: 2px dashed #fbbf24;
+            border-radius: 12px;
+            padding: 1rem 1.25rem;
+            min-width: 160px;
+            text-align: center;
+            flex-shrink: 0;
+        }
+        .flow-human .step-name { color: #fbbf24; }
+
+        /* Config table */
+        table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
+        th { background: #1e293b; padding: 0.6rem 0.75rem; text-align: left; font-size: 0.8rem; color: #94a3b8; font-weight: 600; text-transform: uppercase; border-bottom: 1px solid #334155; }
+        td { padding: 0.6rem 0.75rem; border-bottom: 1px solid #1e293b; font-size: 0.9rem; }
+        td code { font-size: 0.85rem; }
+
+        /* File tree */
+        .file-tree {
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 12px;
+            padding: 1.5rem 2rem;
+            font-family: 'Cascadia Code', 'Fira Code', monospace;
+            font-size: 0.85rem;
+            line-height: 1.8;
+            color: #94a3b8;
+            overflow-x: auto;
+        }
+        .file-tree .dir { color: #60a5fa; font-weight: 600; }
+        .file-tree .file { color: #cbd5e1; }
+        .file-tree .comment { color: #64748b; }
+
+        @media (max-width: 768px) {
+            nav { flex-wrap: wrap; gap: 0.5rem; }
+            .flow { flex-direction: column; }
+            .flow-arrow { transform: rotate(90deg); }
+        }
+    </style>
+</head>
+<body>
+    <nav>
+        <span class="brand">Dawah-Translate</span>
+        <a href="/">Home</a>
+        <a href="/about">About</a>
+        <a href="/architecture" class="active">Architecture</a>
+        <a href="/glossary">Glossary</a>
+    </nav>
+
+    <div class="container">
+        <h1>Technical Architecture</h1>
+        <p class="subtitle">How the pipeline is built, what each component does, and how data flows through the system.</p>
+
+        <h2>Pipeline Flow</h2>
+        <div class="flow">
+            <div class="flow-step">
+                <div class="step-name">Download</div>
+                <div class="step-tool">yt-dlp + FFmpeg</div>
+                <div class="step-output">video.mp4 + audio.wav</div>
+            </div>
+            <div class="flow-arrow">&#10132;</div>
+            <div class="flow-step">
+                <div class="step-name">Transcribe</div>
+                <div class="step-tool">faster-whisper</div>
+                <div class="step-output">transcript_original.srt</div>
+            </div>
+            <div class="flow-arrow">&#10132;</div>
+            <div class="flow-step">
+                <div class="step-name">Translate</div>
+                <div class="step-tool">NLLB-200 / Claude</div>
+                <div class="step-output">transcript_romanian.srt</div>
+            </div>
+            <div class="flow-arrow">&#10132;</div>
+            <div class="flow-human">
+                <div class="step-name">Human Review</div>
+                <div class="step-tool">review.html</div>
+                <div class="step-output">edited subtitles</div>
+            </div>
+            <div class="flow-arrow">&#10132;</div>
+            <div class="flow-step">
+                <div class="step-name">Burn</div>
+                <div class="step-tool">FFmpeg + ASS</div>
+                <div class="step-output">final.mp4</div>
+            </div>
+        </div>
+
+        <h2>Project Structure</h2>
+        <div class="file-tree">
+            <span class="dir">dawah-translate/</span><br>
+            ├── <span class="file">server.py</span> <span class="comment">— FastAPI server, API routes, background tasks</span><br>
+            ├── <span class="file">config.py</span> <span class="comment">— Central settings (paths, limits, API keys)</span><br>
+            ├── <span class="file">glossary.json</span> <span class="comment">— Arabic → Romanian term mappings</span><br>
+            ├── <span class="file">requirements.txt</span> <span class="comment">— Python dependencies</span><br>
+            ├── <span class="file">.env</span> <span class="comment">— API keys (gitignored)</span><br>
+            ├── <span class="dir">pipeline/</span><br>
+            │   ├── <span class="file">download.py</span> <span class="comment">— YouTube download + audio extraction</span><br>
+            │   ├── <span class="file">transcribe.py</span> <span class="comment">— Whisper speech-to-text</span><br>
+            │   ├── <span class="file">translate.py</span> <span class="comment">— Claude API translation</span><br>
+            │   ├── <span class="file">translate_local.py</span> <span class="comment">— NLLB-200 local translation</span><br>
+            │   ├── <span class="file">subtitle.py</span> <span class="comment">— SRT/ASS parsing, normalization</span><br>
+            │   └── <span class="file">burn.py</span> <span class="comment">— FFmpeg subtitle burning</span><br>
+            ├── <span class="dir">static/</span><br>
+            │   ├── <span class="file">index.html</span> <span class="comment">— Job submission + list</span><br>
+            │   ├── <span class="file">review.html</span> <span class="comment">— Subtitle review UI</span><br>
+            │   ├── <span class="file">glossary.html</span> <span class="comment">— Glossary editor</span><br>
+            │   ├── <span class="file">about.html</span> <span class="comment">— Project documentation</span><br>
+            │   └── <span class="file">architecture.html</span> <span class="comment">— This page</span><br>
+            ├── <span class="dir">fonts/</span><br>
+            │   └── <span class="file">NotoSans-Bold.ttf</span> <span class="comment">— Subtitle font</span><br>
+            └── <span class="dir">jobs/</span> <span class="comment">— Job directories (gitignored)</span><br>
+            &nbsp;&nbsp;&nbsp;&nbsp;└── <span class="dir">{job_id}/</span><br>
+            &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;├── <span class="file">job_info.json</span><br>
+            &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;├── <span class="file">video.mp4</span><br>
+            &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;├── <span class="file">audio.wav</span><br>
+            &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;├── <span class="file">transcript_original.srt</span><br>
+            &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;├── <span class="file">transcript_romanian.srt</span><br>
+            &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;├── <span class="file">subtitles.ass</span><br>
+            &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;└── <span class="file">final.mp4</span>
+        </div>
+
+        <h2>Component Details</h2>
+        <div class="component-grid">
+            <div class="component">
+                <h3>Download</h3>
+                <div class="file">pipeline/download.py</div>
+                <p>Downloads YouTube video and extracts audio for Whisper.</p>
+                <span class="tag tool">yt-dlp</span>
+                <span class="tag tool">FFmpeg</span>
+                <ul>
+                    <li>Max resolution: 1080p MP4</li>
+                    <li>Audio: 16kHz mono WAV (PCM 16-bit)</li>
+                    <li>Extracts metadata: title, uploader, duration</li>
+                </ul>
+                <span class="tag input">YouTube URL</span>
+                <span class="tag output">video.mp4 + audio.wav</span>
+            </div>
+
+            <div class="component">
+                <h3>Transcribe</h3>
+                <div class="file">pipeline/transcribe.py</div>
+                <p>Speech-to-text using faster-whisper on CPU.</p>
+                <span class="tag tool">faster-whisper</span>
+                <span class="tag tool">CTranslate2</span>
+                <ul>
+                    <li>Models: large-v3 (3 GB) or medium (1.5 GB)</li>
+                    <li>Quantization: int8 (CPU-friendly)</li>
+                    <li>VAD filtering to skip silence</li>
+                    <li>Auto language detection</li>
+                </ul>
+                <span class="tag input">audio.wav</span>
+                <span class="tag output">transcript_original.srt</span>
+            </div>
+
+            <div class="component">
+                <h3>Translate (Claude API)</h3>
+                <div class="file">pipeline/translate.py</div>
+                <p>Context-aware translation using Claude with glossary enforcement.</p>
+                <span class="tag tool">Anthropic SDK</span>
+                <ul>
+                    <li>Batch size: 50 segments per API call</li>
+                    <li>Context: 5 previous segments per batch</li>
+                    <li>Tracks introduced glossary terms</li>
+                    <li>Character limits per segment duration</li>
+                </ul>
+                <span class="tag input">transcript_original.srt</span>
+                <span class="tag output">transcript_romanian.srt</span>
+            </div>
+
+            <div class="component">
+                <h3>Translate (NLLB Local)</h3>
+                <div class="file">pipeline/translate_local.py</div>
+                <p>Free local translation using Meta's NLLB-200 model.</p>
+                <span class="tag tool">CTranslate2</span>
+                <span class="tag tool">HuggingFace</span>
+                <ul>
+                    <li>Model: nllb-200-distilled-600M (~400 MB)</li>
+                    <li>Supports: Arabic, English, Turkish, French</li>
+                    <li>Glossary post-processing for Islamic terms</li>
+                    <li>Known-pattern replacement table</li>
+                </ul>
+                <span class="tag input">transcript_original.srt</span>
+                <span class="tag output">transcript_romanian.srt</span>
+            </div>
+
+            <div class="component">
+                <h3>Subtitle Utilities</h3>
+                <div class="file">pipeline/subtitle.py</div>
+                <p>SRT parsing, writing, normalization, and ASS conversion.</p>
+                <ul>
+                    <li>Romanian diacritic normalization (ş→ș, ţ→ț)</li>
+                    <li>Reading speed calculation (chars/sec)</li>
+                    <li>Resegmentation: split long blocks</li>
+                    <li>SRT → ASS with font styling</li>
+                </ul>
+            </div>
+
+            <div class="component">
+                <h3>Burn Subtitles</h3>
+                <div class="file">pipeline/burn.py</div>
+                <p>Burns styled subtitles into the video using FFmpeg.</p>
+                <span class="tag tool">FFmpeg</span>
+                <ul>
+                    <li>Codec: libx264, preset medium, CRF 20</li>
+                    <li>Font: Noto Sans Bold 56pt</li>
+                    <li>Style: white text, black outline + shadow</li>
+                    <li>Audio: copied (not re-encoded)</li>
+                </ul>
+                <span class="tag input">video.mp4 + romanian.srt</span>
+                <span class="tag output">final.mp4</span>
+            </div>
+        </div>
+
+        <h2>API Endpoints</h2>
+        <table>
+            <thead>
+                <tr><th>Method</th><th>Endpoint</th><th>Description</th></tr>
+            </thead>
+            <tbody>
+                <tr><td><code>GET</code></td><td><code>/</code></td><td>Home page (job submission form)</td></tr>
+                <tr><td><code>GET</code></td><td><code>/review/{job_id}</code></td><td>Subtitle review page</td></tr>
+                <tr><td><code>GET</code></td><td><code>/glossary</code></td><td>Glossary editor page</td></tr>
+                <tr><td><code>GET</code></td><td><code>/about</code></td><td>Project documentation</td></tr>
+                <tr><td><code>GET</code></td><td><code>/architecture</code></td><td>Architecture diagrams (this page)</td></tr>
+                <tr><td colspan="3" style="padding: 0.3rem; background: #0f172a;"></td></tr>
+                <tr><td><code>POST</code></td><td><code>/api/submit</code></td><td>Submit a new translation job</td></tr>
+                <tr><td><code>GET</code></td><td><code>/api/status/{job_id}</code></td><td>Get job status and progress</td></tr>
+                <tr><td><code>GET</code></td><td><code>/api/jobs</code></td><td>List all jobs</td></tr>
+                <tr><td><code>POST</code></td><td><code>/api/retry/{job_id}</code></td><td>Retry a failed job</td></tr>
+                <tr><td><code>GET</code></td><td><code>/api/job/{id}/video</code></td><td>Stream video (Range support)</td></tr>
+                <tr><td><code>GET</code></td><td><code>/api/job/{id}/srt</code></td><td>Get subtitles as JSON</td></tr>
+                <tr><td><code>POST</code></td><td><code>/api/job/{id}/srt</code></td><td>Save edited subtitles</td></tr>
+                <tr><td><code>POST</code></td><td><code>/api/job/{id}/retranslate</code></td><td>Re-translate a single segment</td></tr>
+                <tr><td><code>POST</code></td><td><code>/api/job/{id}/burn</code></td><td>Start subtitle burning</td></tr>
+                <tr><td><code>GET</code></td><td><code>/api/job/{id}/download</code></td><td>Download final MP4</td></tr>
+                <tr><td><code>GET</code></td><td><code>/api/glossary</code></td><td>Get glossary JSON</td></tr>
+                <tr><td><code>POST</code></td><td><code>/api/glossary</code></td><td>Save glossary JSON</td></tr>
+            </tbody>
+        </table>
+
+        <h2>Configuration Reference</h2>
+        <table>
+            <thead>
+                <tr><th>Setting</th><th>Default</th><th>Purpose</th></tr>
+            </thead>
+            <tbody>
+                <tr><td><code>MAX_CHARS_PER_LINE</code></td><td>42</td><td>Max characters per subtitle line</td></tr>
+                <tr><td><code>MAX_LINES_PER_BLOCK</code></td><td>2</td><td>Max lines per subtitle block</td></tr>
+                <tr><td><code>MAX_READING_SPEED</code></td><td>21 cps</td><td>Chars/sec threshold for "too fast"</td></tr>
+                <tr><td><code>MIN_DISPLAY_DURATION</code></td><td>1.0s</td><td>Minimum subtitle display time</td></tr>
+                <tr><td><code>TRANSLATION_BATCH_SIZE</code></td><td>50</td><td>Segments per Claude API call</td></tr>
+                <tr><td><code>TRANSLATION_CONTEXT_SIZE</code></td><td>5</td><td>Previous segments as context</td></tr>
+                <tr><td><code>FFMPEG_PRESET</code></td><td>"medium"</td><td>Encoding speed/quality balance</td></tr>
+                <tr><td><code>FFMPEG_CRF</code></td><td>20</td><td>Quality (lower = better, bigger file)</td></tr>
+                <tr><td><code>JOB_MAX_AGE_DAYS</code></td><td>7</td><td>Auto-delete jobs older than this</td></tr>
+                <tr><td><code>WHISPER_CPU_THREADS</code></td><td>8</td><td>CPU threads for Whisper</td></tr>
+            </tbody>
+        </table>
+
+        <h2>Glossary System</h2>
+        <p>The glossary is the key innovation for handling Islamic terminology in translation. Here's how it works in each translation path:</p>
+
+        <div class="component-grid">
+            <div class="component" style="border-top-color: #c084fc;">
+                <h3>Claude API Path</h3>
+                <p>The glossary is embedded directly in Claude's system prompt. Claude reads the rules and applies them contextually:</p>
+                <ul>
+                    <li>First occurrence of "صلاة" → "Salah (rugaciunea rituala)"</li>
+                    <li>Subsequent occurrences → "Salah"</li>
+                    <li>Tracks introduced terms across batches</li>
+                    <li>Respects character limits</li>
+                </ul>
+            </div>
+            <div class="component" style="border-top-color: #fbbf24;">
+                <h3>NLLB Local Path</h3>
+                <p>NLLB can't be prompted, so glossary is applied as post-processing:</p>
+                <ul>
+                    <li>NLLB translates "صلاة" → "rugaciune"</li>
+                    <li>Post-processor detects "rugaciune" in output</li>
+                    <li>Replaces with "Salah (rugaciunea rituala)"</li>
+                    <li>Uses a known-pattern table for each Arabic term</li>
+                </ul>
+            </div>
+        </div>
+
+        <div style="margin-top: 3rem; padding-top: 2rem; border-top: 1px solid #334155; text-align: center; color: #64748b; font-size: 0.85rem;">
+            Dawah-Translate &middot; Technical Documentation
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>About — Dawah-Translate</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background: #0f172a;
+            color: #e2e8f0;
+            min-height: 100vh;
+            line-height: 1.7;
+        }
+        .container { max-width: 900px; margin: 0 auto; padding: 2rem; }
+
+        /* Navigation */
+        nav {
+            background: #1e293b;
+            border-bottom: 1px solid #334155;
+            padding: 0.75rem 2rem;
+            display: flex;
+            align-items: center;
+            gap: 2rem;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        nav a {
+            color: #94a3b8;
+            text-decoration: none;
+            font-size: 0.9rem;
+            transition: color 0.2s;
+        }
+        nav a:hover, nav a.active { color: #3b82f6; }
+        nav .brand {
+            font-weight: 700;
+            font-size: 1.1rem;
+            color: #f8fafc;
+            margin-right: auto;
+        }
+
+        h1 { font-size: 2.2rem; margin-bottom: 0.5rem; color: #f8fafc; }
+        h2 { font-size: 1.5rem; margin: 2.5rem 0 1rem; color: #f8fafc; border-bottom: 1px solid #334155; padding-bottom: 0.5rem; }
+        h3 { font-size: 1.15rem; margin: 1.5rem 0 0.5rem; color: #cbd5e1; }
+        .subtitle { color: #94a3b8; margin-bottom: 2rem; font-size: 1.05rem; }
+
+        p { margin-bottom: 1rem; color: #cbd5e1; }
+        ul, ol { margin: 0.5rem 0 1.5rem 1.5rem; color: #cbd5e1; }
+        li { margin-bottom: 0.4rem; }
+        strong { color: #f1f5f9; }
+        code {
+            background: #1e293b;
+            padding: 0.15rem 0.4rem;
+            border-radius: 4px;
+            font-size: 0.9em;
+            color: #7dd3fc;
+        }
+        a { color: #3b82f6; }
+
+        /* Cards */
+        .card-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1.5rem;
+            margin: 1.5rem 0;
+        }
+        .card {
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 12px;
+            padding: 1.5rem;
+        }
+        .card h3 { margin-top: 0; color: #f8fafc; }
+        .card p { font-size: 0.9rem; color: #94a3b8; margin-bottom: 0; }
+        .card .label {
+            display: inline-block;
+            padding: 0.2rem 0.6rem;
+            border-radius: 20px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            margin-bottom: 0.75rem;
+        }
+        .card .label.complete { background: #14532d; color: #4ade80; }
+        .card .label.next { background: #1e3a5f; color: #60a5fa; }
+        .card .label.future { background: #3b1f3b; color: #c084fc; }
+
+        /* Problem/Solution pairs */
+        .problem-solution {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+            margin: 1rem 0 2rem;
+        }
+        .problem, .solution {
+            background: #1e293b;
+            border-radius: 10px;
+            padding: 1.25rem;
+            border: 1px solid #334155;
+        }
+        .problem { border-left: 3px solid #ef4444; }
+        .solution { border-left: 3px solid #22c55e; }
+        .problem h4 { color: #f87171; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem; }
+        .solution h4 { color: #4ade80; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem; }
+
+        /* Timeline */
+        .timeline { position: relative; margin: 1.5rem 0 1.5rem 1rem; padding-left: 2rem; border-left: 2px solid #334155; }
+        .timeline-item { position: relative; margin-bottom: 1.5rem; }
+        .timeline-item::before {
+            content: '';
+            position: absolute;
+            left: -2.35rem;
+            top: 0.4rem;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #334155;
+            border: 2px solid #0f172a;
+        }
+        .timeline-item.done::before { background: #22c55e; }
+        .timeline-item.active::before { background: #3b82f6; box-shadow: 0 0 8px rgba(59, 130, 246, 0.5); }
+        .timeline-item h4 { color: #f1f5f9; font-size: 0.95rem; margin-bottom: 0.25rem; }
+        .timeline-item p { font-size: 0.85rem; color: #94a3b8; margin-bottom: 0; }
+
+        /* Table */
+        table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
+        th { background: #1e293b; padding: 0.6rem 0.75rem; text-align: left; font-size: 0.8rem; color: #94a3b8; font-weight: 600; text-transform: uppercase; border-bottom: 1px solid #334155; }
+        td { padding: 0.6rem 0.75rem; border-bottom: 1px solid #1e293b; font-size: 0.9rem; }
+
+        @media (max-width: 768px) {
+            .problem-solution { grid-template-columns: 1fr; }
+            nav { flex-wrap: wrap; gap: 0.5rem; }
+        }
+    </style>
+</head>
+<body>
+    <nav>
+        <span class="brand">Dawah-Translate</span>
+        <a href="/">Home</a>
+        <a href="/about" class="active">About</a>
+        <a href="/architecture">Architecture</a>
+        <a href="/glossary">Glossary</a>
+    </nav>
+
+    <div class="container">
+        <h1>About Dawah-Translate</h1>
+        <p class="subtitle">
+            A self-hosted pipeline that translates Islamic YouTube content into Romanian,
+            producing ready-to-upload videos with burned-in subtitles.
+        </p>
+
+        <h2>The Problem</h2>
+        <p>
+            There is a wealth of Islamic educational content on YouTube in Arabic and English,
+            but very little is accessible to Romanian-speaking Muslims. Manually translating and
+            subtitling videos is extremely time-consuming. Existing tools like YouTube's auto-translate
+            produce poor results for Islamic terminology -- translating "Salah" and "Du'a" to the
+            same Romanian word ("rugaciune"), losing critical theological distinctions.
+        </p>
+
+        <div class="problem-solution">
+            <div class="problem">
+                <h4>Problem</h4>
+                <p>Arabic Islamic terms get mistranslated. "Salah" (ritual prayer) and "du'a" (supplication) both become "rugaciune" in Romanian, erasing the distinction.</p>
+            </div>
+            <div class="solution">
+                <h4>Solution</h4>
+                <p>A glossary system that transliterates terms (Salah, du'a) and adds explanations only on first occurrence: "Salah (rugaciunea rituala)".</p>
+            </div>
+        </div>
+        <div class="problem-solution">
+            <div class="problem">
+                <h4>Problem</h4>
+                <p>AI translations produce "walls of text" -- 15-word subtitles that stay on screen for 1.5 seconds. Impossible to read.</p>
+            </div>
+            <div class="solution">
+                <h4>Solution</h4>
+                <p>Reading speed validation (max 21 characters/second), automatic resegmentation, and a review UI that highlights too-fast segments.</p>
+            </div>
+        </div>
+        <div class="problem-solution">
+            <div class="problem">
+                <h4>Problem</h4>
+                <p>Romanian diacritics (ș, ț) break in many subtitle renderers. AI models often output the wrong Unicode variant (cedilla instead of comma-below).</p>
+            </div>
+            <div class="solution">
+                <h4>Solution</h4>
+                <p>Automatic normalization of all ş→ș and ţ→ț throughout the pipeline, plus Noto Sans font for correct glyph rendering.</p>
+            </div>
+        </div>
+
+        <h2>How It Works</h2>
+        <p>The pipeline has 5 main stages:</p>
+
+        <div class="timeline">
+            <div class="timeline-item done">
+                <h4>1. Download</h4>
+                <p>Paste a YouTube URL. The system downloads the video (max 1080p) and extracts audio optimized for speech recognition (16kHz mono WAV).</p>
+            </div>
+            <div class="timeline-item done">
+                <h4>2. Transcribe</h4>
+                <p>Audio is transcribed using OpenAI's Whisper model (running locally via faster-whisper). Supports Arabic, English, Turkish, French, and auto-detection. Produces timestamped SRT subtitles.</p>
+            </div>
+            <div class="timeline-item done">
+                <h4>3. Translate</h4>
+                <p>Subtitles are translated to Romanian. Choose between free local translation (NLLB-200, Meta's multilingual model) or Claude API (higher quality, understands Islamic context). Both apply the glossary.</p>
+            </div>
+            <div class="timeline-item done">
+                <h4>4. Review</h4>
+                <p>A web UI shows the video alongside the subtitle table. Edit translations inline, check reading speed, re-translate individual segments. The human is in the loop <em>before</em> burning.</p>
+            </div>
+            <div class="timeline-item done">
+                <h4>5. Burn & Download</h4>
+                <p>Once approved, FFmpeg burns the subtitles directly into the video as styled text (Noto Sans Bold, white with black outline). Download the final MP4.</p>
+            </div>
+        </div>
+
+        <h2>Technology Stack</h2>
+        <table>
+            <thead>
+                <tr><th>Component</th><th>Technology</th><th>Why</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>Web Server</td><td>FastAPI + Uvicorn</td><td>Async Python, background tasks, streaming</td></tr>
+                <tr><td>Video Download</td><td>yt-dlp</td><td>Most reliable YouTube downloader</td></tr>
+                <tr><td>Transcription</td><td>faster-whisper</td><td>CPU-friendly Whisper with int8 quantization</td></tr>
+                <tr><td>Translation (local)</td><td>NLLB-200 via CTranslate2</td><td>Free, offline, ~400 MB model</td></tr>
+                <tr><td>Translation (API)</td><td>Anthropic Claude</td><td>Context-aware, glossary-enforcing AI</td></tr>
+                <tr><td>Video Processing</td><td>FFmpeg</td><td>Industry standard for transcoding + subtitles</td></tr>
+                <tr><td>Subtitle Format</td><td>SRT → ASS</td><td>ASS supports font, outline, positioning</td></tr>
+                <tr><td>Font</td><td>Noto Sans Bold</td><td>Perfect Romanian diacritic support</td></tr>
+                <tr><td>Frontend</td><td>Vanilla HTML/CSS/JS</td><td>No build step, 3 pages total</td></tr>
+            </tbody>
+        </table>
+
+        <h2>Project Roadmap</h2>
+        <div class="card-grid">
+            <div class="card">
+                <span class="label complete">COMPLETE</span>
+                <h3>Phase 1: Core Pipeline</h3>
+                <p>Download, transcribe, translate, review, and burn subtitles. Full web UI with job management.</p>
+            </div>
+            <div class="card">
+                <span class="label next">NEXT</span>
+                <h3>Phase 2: Quality & Polish</h3>
+                <p>Speaker diarization, translation memory, Telegram notifications, batch processing, Google Drive upload.</p>
+            </div>
+            <div class="card">
+                <span class="label future">FUTURE</span>
+                <h3>Phase 3: Scale & Share</h3>
+                <p>Docker deployment, multi-user auth, YouTube direct upload, cloud hosting options.</p>
+            </div>
+        </div>
+
+        <h2>Alternatives Considered</h2>
+        <table>
+            <thead>
+                <tr><th>Alternative</th><th>Why Not</th></tr>
+            </thead>
+            <tbody>
+                <tr><td><strong>n8n</strong> (original plan)</td><td>Can't handle large video files in memory, limited FFmpeg support, n8n nodes crash on 2-hour videos</td></tr>
+                <tr><td><strong>Whisper API</strong> (cloud)</td><td>25 MB upload limit, no Arabic→Romanian path, per-minute cost</td></tr>
+                <tr><td><strong>Google Translate</strong></td><td>Poor Islamic terminology handling, no glossary control</td></tr>
+                <tr><td><strong>DeepL</strong></td><td>No Arabic language support</td></tr>
+                <tr><td><strong>YouTube auto-translate</strong></td><td>No Romanian, no terminology control, can't burn subtitles in</td></tr>
+                <tr><td><strong>React/Vue frontend</strong></td><td>Overkill for 3 pages, adds build tooling for no benefit</td></tr>
+            </tbody>
+        </table>
+
+        <h2>Expansion Ideas</h2>
+        <ul>
+            <li><strong>Quran verse detection</strong> -- Detect Quranic recitation, auto-insert standard Romanian translation</li>
+            <li><strong>Islamic lecture database</strong> -- Index translated lectures by topic, speaker, difficulty</li>
+            <li><strong>Community review</strong> -- Multiple reviewers collaborating on translations</li>
+            <li><strong>A/B translation testing</strong> -- Compare two translations, pick the better one</li>
+            <li><strong>Audio dubbing</strong> -- Generate Romanian audio track via TTS (experimental)</li>
+            <li><strong>Subtitle style presets</strong> -- Different styles for lectures, debates, nasheed</li>
+        </ul>
+
+        <h2>Who Made This</h2>
+        <p>
+            This project was built for the Romanian Muslim community to make Islamic educational content
+            more accessible. It's open source and welcomes contributions.
+        </p>
+        <p>
+            Built with the help of <strong>Claude</strong> (Anthropic) for both the translation engine
+            and the codebase itself.
+        </p>
+
+        <div style="margin-top: 3rem; padding-top: 2rem; border-top: 1px solid #334155; text-align: center; color: #64748b; font-size: 0.85rem;">
+            Dawah-Translate &middot; Open Source &middot; MIT License
+        </div>
+    </div>
+</body>
+</html>

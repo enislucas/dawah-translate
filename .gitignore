@@ -1,0 +1,33 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# Environment
+.env
+.env.local
+
+# Jobs (large video/audio files)
+dawah-translate/jobs/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Temp
+*.tmp
+New Text Document.txt
+
+# Claude Code local settings
+.claude/

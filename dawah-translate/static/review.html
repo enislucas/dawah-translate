@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Review Subtitles — Dawah-Translate</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background: #0f172a;
+            color: #e2e8f0;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* Header */
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.75rem 1.5rem;
+            background: #1e293b;
+            border-bottom: 1px solid #334155;
+            flex-shrink: 0;
+        }
+        .header h1 { font-size: 1.1rem; color: #f8fafc; }
+        .header a { color: #3b82f6; text-decoration: none; font-size: 0.9rem; }
+        .header a:hover { text-decoration: underline; }
+        .header .title-info {
+            font-size: 0.85rem;
+            color: #94a3b8;
+            margin-left: 1rem;
+        }
+
+        /* Main layout */
+        .main {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        /* Video section */
+        .video-section {
+            position: relative;
+            background: #000;
+            flex-shrink: 0;
+            display: flex;
+            justify-content: center;
+            max-height: 45vh;
+        }
+        video {
+            max-width: 100%;
+            max-height: 45vh;
+            display: block;
+        }
+        .subtitle-preview {
+            position: absolute;
+            bottom: 40px;
+            left: 50%;
+            transform: translateX(-50%);
+            text-align: center;
+            font-family: 'Noto Sans', 'Segoe UI', sans-serif;
+            font-size: 1.4rem;
+            font-weight: 700;
+            color: #fff;
+            text-shadow: -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 2px 2px 0 #000,
+                         0 -2px 0 #000, 0 2px 0 #000, -2px 0 0 #000, 2px 0 0 #000;
+            max-width: 80%;
+            line-height: 1.4;
+            pointer-events: none;
+            white-space: pre-line;
+        }
+
+        /* Subtitle table */
+        .table-section {
+            flex: 1;
+            overflow-y: auto;
+            border-top: 1px solid #334155;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9rem;
+        }
+        thead {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+        th {
+            background: #1e293b;
+            padding: 0.6rem 0.75rem;
+            text-align: left;
+            font-size: 0.8rem;
+            color: #94a3b8;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            border-bottom: 1px solid #334155;
+        }
+        td {
+            padding: 0.5rem 0.75rem;
+            border-bottom: 1px solid #1e293b;
+            vertical-align: top;
+        }
+        tr { transition: background 0.15s; }
+        tr:hover { background: #1e293b; }
+        tr.active {
+            background: #1e3a5f !important;
+            border-left: 3px solid #3b82f6;
+        }
+        tr.too-fast td { background: rgba(239, 68, 68, 0.1); }
+
+        /* Column widths */
+        .col-idx { width: 3rem; text-align: center; color: #64748b; }
+        .col-time { width: 10rem; font-family: monospace; font-size: 0.8rem; color: #94a3b8; white-space: nowrap; }
+        .col-original { width: 30%; color: #94a3b8; font-size: 0.85rem; }
+        .col-romanian { min-width: 30%; }
+        .col-speed { width: 5rem; text-align: center; }
+        .col-actions { width: 5rem; text-align: center; }
+
+        /* Editable cells */
+        .editable {
+            cursor: text;
+            padding: 0.4rem 0.6rem;
+            border-radius: 4px;
+            min-height: 2em;
+            line-height: 1.4;
+            border: 1px solid transparent;
+            transition: border-color 0.2s;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+        .editable:hover { border-color: #475569; }
+        .editable:focus {
+            outline: none;
+            border-color: #3b82f6;
+            background: #0f172a;
+        }
+        .editable.saving { border-color: #22c55e; }
+        .editable.error { border-color: #ef4444; }
+
+        /* Speed indicator */
+        .speed { font-family: monospace; font-size: 0.85rem; }
+        .speed.ok { color: #4ade80; }
+        .speed.warn { color: #fbbf24; }
+        .speed.danger { color: #ef4444; font-weight: 700; }
+
+        /* Buttons */
+        .btn-small {
+            padding: 0.3rem 0.6rem;
+            background: #334155;
+            color: #cbd5e1;
+            border: none;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .btn-small:hover { background: #475569; }
+        .btn-small:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        /* Bottom bar */
+        .bottom-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.75rem 1.5rem;
+            background: #1e293b;
+            border-top: 1px solid #334155;
+            flex-shrink: 0;
+        }
+        .bottom-bar .info {
+            font-size: 0.85rem;
+            color: #94a3b8;
+        }
+        .btn-primary {
+            padding: 0.7rem 2rem;
+            background: #16a34a;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .btn-primary:hover { background: #15803d; }
+        .btn-primary:disabled { background: #475569; cursor: not-allowed; }
+        .btn-download {
+            padding: 0.7rem 2rem;
+            background: #3b82f6;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: none;
+            display: none;
+        }
+        .btn-download:hover { background: #2563eb; }
+
+        /* Loading */
+        .loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            font-size: 1.2rem;
+            color: #94a3b8;
+        }
+
+        /* Keyboard shortcuts help */
+        .shortcuts {
+            font-size: 0.75rem;
+            color: #64748b;
+        }
+        .shortcuts kbd {
+            background: #334155;
+            padding: 0.1rem 0.4rem;
+            border-radius: 3px;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <div id="loading" class="loading">Loading job...</div>
+
+    <div id="app" style="display: none; height: 100vh; display: none; flex-direction: column;">
+        <!-- Header -->
+        <div class="header">
+            <div style="display: flex; align-items: center;">
+                <h1>Review Subtitles</h1>
+                <span class="title-info" id="videoTitle"></span>
+            </div>
+            <div>
+                <span class="shortcuts">
+                    <kbd>Space</kbd> play/pause &nbsp;
+                    <kbd>&larr;</kbd><kbd>&rarr;</kbd> prev/next segment &nbsp;
+                    <kbd>Enter</kbd> play segment
+                </span>
+                &nbsp;&nbsp;
+                <a href="/">Back to Home</a>
+            </div>
+        </div>
+
+        <!-- Video -->
+        <div class="video-section">
+            <video id="video" controls preload="auto"></video>
+            <div class="subtitle-preview" id="subtitlePreview"></div>
+        </div>
+
+        <!-- Subtitle Table -->
+        <div class="table-section" id="tableSection">
+            <table>
+                <thead>
+                    <tr>
+                        <th class="col-idx">#</th>
+                        <th class="col-time">Timecode</th>
+                        <th class="col-original">Original</th>
+                        <th class="col-romanian">Romanian (editable)</th>
+                        <th class="col-speed">CPS</th>
+                        <th class="col-actions">Action</th>
+                    </tr>
+                </thead>
+                <tbody id="subtitleBody"></tbody>
+            </table>
+        </div>
+
+        <!-- Bottom Bar -->
+        <div class="bottom-bar">
+            <div class="info" id="bottomInfo">Loading...</div>
+            <div style="display: flex; gap: 1rem; align-items: center;">
+                <span id="burnStatus" style="color: #94a3b8; font-size: 0.9rem;"></span>
+                <button class="btn-primary" id="burnBtn" onclick="burnSubtitles()">
+                    Approve &amp; Burn Subtitles
+                </button>
+                <a class="btn-download" id="downloadBtn" href="#">Download Final Video</a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    // ── State ────────────────────────────────────────────────────────
+    const jobId = window.location.pathname.split('/review/')[1];
+    let segments = [];
+    let currentSegmentIdx = -1;
+    let saveTimeout = null;
+
+    const video = document.getElementById('video');
+    const subtitlePreview = document.getElementById('subtitlePreview');
+    const subtitleBody = document.getElementById('subtitleBody');
+    const tableSection = document.getElementById('tableSection');
+    const bottomInfo = document.getElementById('bottomInfo');
+    const burnBtn = document.getElementById('burnBtn');
+    const burnStatus = document.getElementById('burnStatus');
+    const downloadBtn = document.getElementById('downloadBtn');
+
+    // ── Initialize ───────────────────────────────────────────────────
+    async function init() {
+        // Load job info
+        const infoRes = await fetch(`/api/status/${jobId}`);
+        const info = await infoRes.json();
+
+        if (info.error) {
+            document.getElementById('loading').textContent = 'Error: ' + info.error;
+            return;
+        }
+
+        document.getElementById('videoTitle').textContent = info.video_title || '';
+
+        // Set video source
+        video.src = `/api/job/${jobId}/video`;
+
+        // Load subtitles
+        await loadSubtitles();
+
+        // Show app
+        document.getElementById('loading').style.display = 'none';
+        const app = document.getElementById('app');
+        app.style.display = 'flex';
+
+        // Check if already burned
+        if (info.status === 'complete') {
+            showDownloadButton();
+        }
+
+        // Start subtitle sync
+        video.addEventListener('timeupdate', syncSubtitles);
+    }
+
+    async function loadSubtitles() {
+        const res = await fetch(`/api/job/${jobId}/srt`);
+        segments = await res.json();
+        renderTable();
+        updateBottomInfo();
+    }
+
+    // ── Render subtitle table ────────────────────────────────────────
+    function renderTable() {
+        subtitleBody.innerHTML = segments.map((seg, i) => {
+            const startTime = formatTime(seg.start);
+            const endTime = formatTime(seg.end);
+            const speedClass = seg.reading_speed > 21 ? 'danger' : seg.reading_speed > 18 ? 'warn' : 'ok';
+            const rowClass = seg.too_fast ? 'too-fast' : '';
+
+            return `<tr id="row-${i}" class="${rowClass}" data-index="${i}" onclick="seekToSegment(${i})">
+                <td class="col-idx">${seg.index}</td>
+                <td class="col-time">${startTime}<br>${endTime}</td>
+                <td class="col-original">${escapeHtml(seg.original_text)}</td>
+                <td class="col-romanian">
+                    <div class="editable" contenteditable="true"
+                         id="edit-${i}"
+                         data-index="${i}"
+                         onblur="onEditBlur(${i})"
+                         onkeydown="onEditKeydown(event, ${i})">${escapeHtml(seg.text)}</div>
+                </td>
+                <td class="col-speed">
+                    <span class="speed ${speedClass}">${seg.reading_speed}</span>
+                </td>
+                <td class="col-actions">
+                    <button class="btn-small" onclick="event.stopPropagation(); retranslate(${i})" title="Re-translate this segment">Re-translate</button>
+                </td>
+            </tr>`;
+        }).join('');
+    }
+
+    // ── Subtitle sync ────────────────────────────────────────────────
+    function syncSubtitles() {
+        const time = video.currentTime;
+        let activeIdx = -1;
+
+        for (let i = 0; i < segments.length; i++) {
+            if (time >= segments[i].start && time < segments[i].end) {
+                activeIdx = i;
+                break;
+            }
+        }
+
+        if (activeIdx !== currentSegmentIdx) {
+            // Remove old highlight
+            if (currentSegmentIdx >= 0) {
+                const oldRow = document.getElementById(`row-${currentSegmentIdx}`);
+                if (oldRow) oldRow.classList.remove('active');
+            }
+
+            currentSegmentIdx = activeIdx;
+
+            if (activeIdx >= 0) {
+                const row = document.getElementById(`row-${activeIdx}`);
+                if (row) {
+                    row.classList.add('active');
+                    // Auto-scroll
+                    row.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                }
+                subtitlePreview.textContent = segments[activeIdx].text.replace(/\\n/g, '\n');
+            } else {
+                subtitlePreview.textContent = '';
+            }
+        }
+    }
+
+    // ── Editing ──────────────────────────────────────────────────────
+    function onEditBlur(idx) {
+        const el = document.getElementById(`edit-${idx}`);
+        const newText = el.innerText.trim();
+
+        if (newText !== segments[idx].text) {
+            segments[idx].text = newText;
+            // Recalculate reading speed
+            const duration = segments[idx].end - segments[idx].start;
+            const chars = newText.replace(/\n/g, '').length;
+            segments[idx].reading_speed = Math.round((chars / Math.max(duration, 0.1)) * 10) / 10;
+            segments[idx].too_fast = segments[idx].reading_speed > 21;
+
+            // Update speed display
+            const row = document.getElementById(`row-${idx}`);
+            const speedEl = row.querySelector('.speed');
+            speedEl.textContent = segments[idx].reading_speed;
+            speedEl.className = 'speed ' + (segments[idx].reading_speed > 21 ? 'danger' : segments[idx].reading_speed > 18 ? 'warn' : 'ok');
+
+            // Update row class
+            row.classList.toggle('too-fast', segments[idx].too_fast);
+
+            // Debounced save
+            scheduleSave(el);
+        }
+    }
+
+    function onEditKeydown(event, idx) {
+        if (event.key === 'Escape') {
+            event.target.blur();
+        }
+    }
+
+    function scheduleSave(indicatorEl) {
+        if (saveTimeout) clearTimeout(saveTimeout);
+        saveTimeout = setTimeout(async () => {
+            indicatorEl.classList.add('saving');
+            try {
+                await fetch(`/api/job/${jobId}/srt`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ segments }),
+                });
+                setTimeout(() => indicatorEl.classList.remove('saving'), 500);
+            } catch (err) {
+                indicatorEl.classList.add('error');
+                setTimeout(() => indicatorEl.classList.remove('error'), 2000);
+            }
+            updateBottomInfo();
+        }, 800);
+    }
+
+    // ── Re-translate ─────────────────────────────────────────────────
+    async function retranslate(idx) {
+        const btn = document.querySelector(`#row-${idx} .btn-small`);
+        btn.disabled = true;
+        btn.textContent = '...';
+
+        try {
+            const res = await fetch(`/api/job/${jobId}/retranslate`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    segment_index: segments[idx].index,
+                    source_language: 'auto',
+                    claude_model: 'sonnet',
+                }),
+            });
+            const result = await res.json();
+
+            if (result.text) {
+                segments[idx].text = result.text;
+                segments[idx].reading_speed = result.reading_speed;
+                segments[idx].too_fast = result.too_fast;
+
+                const editEl = document.getElementById(`edit-${idx}`);
+                editEl.textContent = result.text;
+
+                // Update speed
+                const row = document.getElementById(`row-${idx}`);
+                const speedEl = row.querySelector('.speed');
+                speedEl.textContent = result.reading_speed;
+                speedEl.className = 'speed ' + (result.too_fast ? 'danger' : result.reading_speed > 18 ? 'warn' : 'ok');
+                row.classList.toggle('too-fast', result.too_fast);
+
+                // Save all
+                scheduleSave(editEl);
+            }
+        } catch (err) {
+            alert('Re-translate failed: ' + err.message);
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Re-translate';
+        }
+    }
+
+    // ── Burn subtitles ───────────────────────────────────────────────
+    async function burnSubtitles() {
+        if (!confirm('Burn subtitles into the video? This may take a while for long videos.')) return;
+
+        burnBtn.disabled = true;
+        burnStatus.textContent = 'Burning subtitles...';
+
+        try {
+            // Save current edits first
+            await fetch(`/api/job/${jobId}/srt`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ segments }),
+            });
+
+            // Start burn
+            await fetch(`/api/job/${jobId}/burn`, { method: 'POST' });
+
+            // Poll for completion
+            const pollBurn = setInterval(async () => {
+                const res = await fetch(`/api/status/${jobId}`);
+                const info = await res.json();
+
+                burnStatus.textContent = info.progress || info.status;
+
+                if (info.status === 'complete') {
+                    clearInterval(pollBurn);
+                    showDownloadButton();
+                } else if (info.status === 'error') {
+                    clearInterval(pollBurn);
+                    burnBtn.disabled = false;
+                    burnStatus.textContent = 'Error: ' + (info.error || 'Unknown');
+                }
+            }, 3000);
+        } catch (err) {
+            burnBtn.disabled = false;
+            burnStatus.textContent = 'Error: ' + err.message;
+        }
+    }
+
+    function showDownloadButton() {
+        burnBtn.style.display = 'none';
+        downloadBtn.style.display = 'inline-block';
+        downloadBtn.href = `/api/job/${jobId}/download`;
+        burnStatus.textContent = 'Video ready!';
+    }
+
+    // ── Navigation ───────────────────────────────────────────────────
+    function seekToSegment(idx) {
+        if (idx >= 0 && idx < segments.length) {
+            video.currentTime = segments[idx].start;
+        }
+    }
+
+    // ── Keyboard shortcuts ───────────────────────────────────────────
+    document.addEventListener('keydown', (e) => {
+        // Don't intercept when editing text
+        if (e.target.contentEditable === 'true' || e.target.tagName === 'INPUT') return;
+
+        if (e.code === 'Space') {
+            e.preventDefault();
+            video.paused ? video.play() : video.pause();
+        } else if (e.key === 'ArrowLeft') {
+            e.preventDefault();
+            const prev = Math.max(0, currentSegmentIdx - 1);
+            seekToSegment(prev);
+        } else if (e.key === 'ArrowRight') {
+            e.preventDefault();
+            const next = Math.min(segments.length - 1, currentSegmentIdx + 1);
+            seekToSegment(next);
+        } else if (e.key === 'Enter') {
+            e.preventDefault();
+            if (currentSegmentIdx >= 0) {
+                seekToSegment(currentSegmentIdx);
+                video.play();
+            }
+        }
+    });
+
+    // ── Utilities ────────────────────────────────────────────────────
+    function formatTime(seconds) {
+        const m = Math.floor(seconds / 60);
+        const s = Math.floor(seconds % 60);
+        const ms = Math.floor((seconds % 1) * 1000);
+        return `${m}:${String(s).padStart(2, '0')}.${String(ms).padStart(3, '0')}`;
+    }
+
+    function escapeHtml(text) {
+        const el = document.createElement('span');
+        el.textContent = text || '';
+        return el.innerHTML;
+    }
+
+    function updateBottomInfo() {
+        const total = segments.length;
+        const warnings = segments.filter(s => s.too_fast).length;
+        bottomInfo.textContent = `${total} segments` + (warnings ? ` | ${warnings} too fast (>21 CPS)` : ' | All within reading speed limits');
+    }
+
+    // ── Start ────────────────────────────────────────────────────────
+    init().catch(err => {
+        document.getElementById('loading').textContent = 'Error loading job: ' + err.message;
+    });
+    </script>
+</body>
+</html>

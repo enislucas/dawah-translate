@@ -1,0 +1,60 @@
+I am working on a online dawah project for Youtube for a Romanian audience. The goal of the project is to obtain an MP4 with Romanian Captions from a Youtube video in a foreign language (e.g. English, Arabic). Videos can range from less than 1 minute (short-format) to 2 hours of content (podcasts, documentaries, long lectures).
+I would like the captions to be embedded in the MP4 file itself, rather than a .srt file that I upload on Youtube. I would also like that the process is localized on my computer (or DFS or anything), yet anyone could be able to use it - as long as I give them the form. However, this is primarily intended for personal use.
+For instance, through a domain link, or a form link - by simply uploading the Youtube url to the video, and then being able to download the converted MP4 file. 
+
+I have some experience in n8n, but not as a engineer, rather as a entrepreneur. 
+This is what I have in mind for the pipeline. 
+
+Phase 1: Intake and Processing
+
+1. Trigger send link through form
+The process begins when someone submits a video link via a web form. This acts as the "trigger" that starts the automation.
+
+2. Download video
+The system automatically fetches and downloads the video file from the provided link to a local or cloud server for processing.
+
+3. Send to whisper API (biggest model)
+The audio from the video is sent to OpenAI's Whisper API. Using the "biggest model" (likely whisper-large-v3) ensures the highest possible accuracy for speech recognition and initial translation. Speaker-recognition might be necessary in some videos, but I'm not sure yet.
+
+4. API outputs TXT file with timestamps translated (in romanian) ( .srt )
+The API generates a text file containing the transcribed dialogue, specific timecodes for when each sentence is spoken, and the translation into Romanian.
+
+Phase 2: Production and Review
+
+5. Add translation to original video (burned in)
+The system overlays the Romanian text onto the video file. "Burned in" means the subtitles are hardcoded into the video frames themselves, so they cannot be turned off by the viewer.
+
+6. Send telegram message to have a human in the loop asking if the video is Approved.
+The automation pauses and sends a notification to a human reviewer via Telegram. This "human-in-the-loop" step ensures quality control before anything is published.
+
+7. If video translation is correct
+This is a decision node. The reviewer checks the accuracy of the Romanian translation and the timing of the subtitles.
+
+Phase 3: Final Output
+
+8. Upload to drive (Top Branch)
+If the translation is approved as-is, the finished video with burned-in subtitles is uploaded directly to a Google Drive folder for distribution.
+
+9. Send edited TXT file and upload to drive (Bottom Branch)
+If the translation needs corrections, the edited text file is processed to update the video, and then the final corrected version is uploaded to the Drive.
+
+
+Problems I see with this 9-step procedure:
+- Some videos might be too large for Whisper AI, for downloading and uploading, etc. -> Extra steps to split the Youtube video into multiple files, then joins them together again. There might be smarter solutions, I'm just thinking out loud.
+- The human in the loop can be highly inefficent wrt token usage, but more importantly, going to an extra channel (i.e. Telegram) is a pain that I would like not to have (Reviewing and editing a .srt file via Telegram is a recipe for a headache. You can't easily see the timing relative to the video.). However, having a human in the loop could be a good idea.
+- Translating from Arabic: Some words are extremely important in Arabic (e.g. translating Salah to "rugaciune" does not do the job, since Dua gets translated to the same word). I would like to have, for instance "Si cand facem rugaciunea (i.e. صلاة) ..." - the issue is that if I ask an AI to pay attention to this, it will start to make Arabic references to half of the sentences, making it difficult for the reader to follow the text.
+- Using n8n might not be the smartest solution, but I am not sure, and not well-versed with other options.
+- Burning subtitles into a video (Hardcoding) is a CPU/GPU intensive process. n8n might not be able to deal with this.
+- AI translations often produce "walls of text" that are impossible to read at the speed of speech. Whisper might output a 15-word sentence that stays on screen for only 1.5 seconds. The viewer won't be able to finish reading it. This might be due to the way Arabic is so concise and sometimes needs 10x the output in the other langauge for convey the message.
+- Rendering "ș", "ț", "ă", "î", and "â" can be a nightmare in video encoding.
+- The Whisper API is designed to either Transcribe (Source Language $\rightarrow$ Source Language) or Translate (Source Language $\rightarrow$ English). The Problem: It does not natively translate Arabic $\rightarrow$ Romanian in one go.
+- My current logic burns the video before the human sees the text.
+- Moving a 2-hour 1080p video through n8n nodes as a "binary" object will likely crash the n8n service or run out of RAM.
+
+
+Your task:
+Can you suggest a new structure, step-by-step method of implementation of this project? Can you re-assess potential issues, pitfalls, blind spots, and any other negative aspect of the plan?
+If you have suggestions, whether incremental (e.g. changing the Whisper model) or radical (moving altogether from n8n) please include it in your plan, with reasoning for why you prefer the change.
+My 9-step procedure is just a dummy prototype, which can be fully discarded. I just want you to understand my level of knowledge, and have a foundation for your start.
+
+Output the new plan, following an exhaustively detailed process / workflow, that I can then use in another Claude chat to just have the new Opus 4.6 fully implement it (I can copy paste the code - by implementing I mean writing the code).

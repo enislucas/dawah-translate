@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 400" font-family="Segoe UI, system-ui, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="10" markerHeight="6" orient="auto-start-auto">
+      <path d="M 0 0 L 10 3 L 0 6 z" fill="#60a5fa"/>
+    </marker>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#0f172a"/>
+      <stop offset="100%" style="stop-color:#1e293b"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1100" height="400" rx="12" fill="url(#bg)"/>
+
+  <!-- Title -->
+  <text x="550" y="40" text-anchor="middle" fill="#f8fafc" font-size="20" font-weight="700">Dawah-Translate Pipeline</text>
+  <text x="550" y="62" text-anchor="middle" fill="#64748b" font-size="12">YouTube URL → Romanian Subtitled MP4</text>
+
+  <!-- Step 1: Download -->
+  <rect x="30" y="100" width="170" height="110" rx="10" fill="#1e293b" stroke="#334155" stroke-width="1.5"/>
+  <text x="115" y="125" text-anchor="middle" fill="#60a5fa" font-size="11" font-weight="600">STEP 1</text>
+  <text x="115" y="148" text-anchor="middle" fill="#f8fafc" font-size="15" font-weight="700">Download</text>
+  <text x="115" y="170" text-anchor="middle" fill="#7dd3fc" font-size="10" font-family="monospace">yt-dlp + FFmpeg</text>
+  <text x="115" y="192" text-anchor="middle" fill="#4ade80" font-size="10">→ video.mp4</text>
+  <text x="115" y="205" text-anchor="middle" fill="#4ade80" font-size="10">→ audio.wav</text>
+
+  <!-- Arrow 1→2 -->
+  <line x1="200" y1="155" x2="240" y2="155" stroke="#60a5fa" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- Step 2: Transcribe -->
+  <rect x="245" y="100" width="170" height="110" rx="10" fill="#1e293b" stroke="#334155" stroke-width="1.5"/>
+  <text x="330" y="125" text-anchor="middle" fill="#60a5fa" font-size="11" font-weight="600">STEP 2</text>
+  <text x="330" y="148" text-anchor="middle" fill="#f8fafc" font-size="15" font-weight="700">Transcribe</text>
+  <text x="330" y="170" text-anchor="middle" fill="#7dd3fc" font-size="10" font-family="monospace">faster-whisper</text>
+  <text x="330" y="192" text-anchor="middle" fill="#94a3b8" font-size="10">CPU int8, large-v3</text>
+  <text x="330" y="205" text-anchor="middle" fill="#4ade80" font-size="10">→ original.srt</text>
+
+  <!-- Arrow 2→3 -->
+  <line x1="415" y1="155" x2="455" y2="155" stroke="#60a5fa" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- Step 3: Translate -->
+  <rect x="460" y="100" width="170" height="110" rx="10" fill="#1e293b" stroke="#334155" stroke-width="1.5"/>
+  <text x="545" y="125" text-anchor="middle" fill="#60a5fa" font-size="11" font-weight="600">STEP 3</text>
+  <text x="545" y="148" text-anchor="middle" fill="#f8fafc" font-size="15" font-weight="700">Translate</text>
+  <text x="545" y="170" text-anchor="middle" fill="#7dd3fc" font-size="10" font-family="monospace">NLLB-200 / Claude</text>
+  <text x="545" y="192" text-anchor="middle" fill="#94a3b8" font-size="10">+ glossary rules</text>
+  <text x="545" y="205" text-anchor="middle" fill="#4ade80" font-size="10">→ romanian.srt</text>
+
+  <!-- Arrow 3→4 -->
+  <line x1="630" y1="155" x2="670" y2="155" stroke="#fbbf24" stroke-width="2" marker-end="url(#arrow)" stroke-dasharray="6,3"/>
+
+  <!-- Step 4: Review (human) -->
+  <rect x="675" y="100" width="170" height="110" rx="10" fill="#1e293b" stroke="#fbbf24" stroke-width="2" stroke-dasharray="6,3"/>
+  <text x="760" y="125" text-anchor="middle" fill="#fbbf24" font-size="11" font-weight="600">STEP 4</text>
+  <text x="760" y="148" text-anchor="middle" fill="#fbbf24" font-size="15" font-weight="700">Human Review</text>
+  <text x="760" y="170" text-anchor="middle" fill="#94a3b8" font-size="10">Edit subtitles in browser</text>
+  <text x="760" y="187" text-anchor="middle" fill="#94a3b8" font-size="10">Check reading speed</text>
+  <text x="760" y="204" text-anchor="middle" fill="#94a3b8" font-size="10">Re-translate segments</text>
+
+  <!-- Arrow 4→5 -->
+  <line x1="845" y1="155" x2="885" y2="155" stroke="#60a5fa" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- Step 5: Burn -->
+  <rect x="890" y="100" width="170" height="110" rx="10" fill="#1e293b" stroke="#22c55e" stroke-width="2"/>
+  <text x="975" y="125" text-anchor="middle" fill="#22c55e" font-size="11" font-weight="600">STEP 5</text>
+  <text x="975" y="148" text-anchor="middle" fill="#f8fafc" font-size="15" font-weight="700">Burn &amp; Export</text>
+  <text x="975" y="170" text-anchor="middle" fill="#7dd3fc" font-size="10" font-family="monospace">FFmpeg + ASS</text>
+  <text x="975" y="192" text-anchor="middle" fill="#94a3b8" font-size="10">Noto Sans Bold</text>
+  <text x="975" y="205" text-anchor="middle" fill="#4ade80" font-size="10">→ final.mp4</text>
+
+  <!-- Glossary box -->
+  <rect x="380" y="260" width="340" height="70" rx="8" fill="#1e293b" stroke="#c084fc" stroke-width="1.5"/>
+  <text x="550" y="285" text-anchor="middle" fill="#c084fc" font-size="12" font-weight="600">Islamic Terminology Glossary</text>
+  <text x="550" y="305" text-anchor="middle" fill="#94a3b8" font-size="10">صلاة → Salah (rugaciunea rituala) | دعاء → du'a (invocatie)</text>
+  <text x="550" y="320" text-anchor="middle" fill="#94a3b8" font-size="10">First occurrence includes explanation, then transliteration only</text>
+
+  <!-- Arrow from glossary to translate -->
+  <line x1="550" y1="260" x2="550" y2="215" stroke="#c084fc" stroke-width="1.5" marker-end="url(#arrow)" stroke-dasharray="4,3"/>
+
+  <!-- Tech stack footer -->
+  <text x="30" y="370" fill="#64748b" font-size="10">FastAPI · yt-dlp · faster-whisper · NLLB-200 · Claude API · FFmpeg · Noto Sans · Vanilla HTML/CSS/JS</text>
+  <text x="1070" y="370" text-anchor="end" fill="#64748b" font-size="10">Self-hosted · No GPU required · Personal use</text>
+</svg>

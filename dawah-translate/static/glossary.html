@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Glossary Editor — Dawah-Translate</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background: #0f172a;
+            color: #e2e8f0;
+            min-height: 100vh;
+        }
+        .container { max-width: 1000px; margin: 0 auto; padding: 2rem; }
+        h1 { font-size: 1.8rem; margin-bottom: 0.5rem; color: #f8fafc; }
+        .subtitle { color: #94a3b8; margin-bottom: 2rem; font-size: 0.95rem; }
+        .subtitle a { color: #3b82f6; text-decoration: none; }
+        .subtitle a:hover { text-decoration: underline; }
+
+        /* Add form */
+        .add-form {
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+        }
+        .add-form h2 { font-size: 1.1rem; margin-bottom: 1rem; color: #f8fafc; }
+        .form-row { display: flex; gap: 1rem; margin-bottom: 1rem; flex-wrap: wrap; }
+        .form-row .field { flex: 1; min-width: 150px; }
+        .form-row label {
+            display: block; font-size: 0.8rem; color: #94a3b8;
+            margin-bottom: 0.3rem; font-weight: 600;
+        }
+        .form-row input {
+            width: 100%; padding: 0.5rem 0.75rem;
+            background: #0f172a; border: 1px solid #475569;
+            border-radius: 6px; color: #f1f5f9; font-size: 0.9rem;
+        }
+        .form-row input:focus { outline: none; border-color: #3b82f6; }
+        .btn {
+            padding: 0.5rem 1.5rem; background: #3b82f6; color: white;
+            border: none; border-radius: 6px; font-size: 0.9rem;
+            font-weight: 600; cursor: pointer;
+        }
+        .btn:hover { background: #2563eb; }
+        .btn-danger { background: #dc2626; }
+        .btn-danger:hover { background: #b91c1c; }
+        .btn-small {
+            padding: 0.3rem 0.6rem; font-size: 0.75rem;
+            background: #334155; color: #cbd5e1; border: none;
+            border-radius: 4px; cursor: pointer;
+        }
+        .btn-small:hover { background: #475569; }
+
+        /* Table */
+        table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+        th {
+            background: #1e293b; padding: 0.6rem 0.75rem;
+            text-align: left; font-size: 0.8rem; color: #94a3b8;
+            font-weight: 600; text-transform: uppercase;
+            border-bottom: 1px solid #334155;
+        }
+        td {
+            padding: 0.6rem 0.75rem; border-bottom: 1px solid #1e293b;
+            font-size: 0.9rem;
+        }
+        tr:hover { background: #1e293b; }
+        .arabic { font-size: 1.1rem; direction: rtl; }
+        .saved-msg {
+            color: #4ade80; font-size: 0.85rem;
+            opacity: 0; transition: opacity 0.3s;
+        }
+        .saved-msg.show { opacity: 1; }
+    </style>
+</head>
+<body>
+    <nav style="background:#1e293b;border-bottom:1px solid #334155;padding:0.75rem 2rem;display:flex;align-items:center;gap:2rem;">
+        <span style="font-weight:700;font-size:1.1rem;color:#f8fafc;margin-right:auto;">Dawah-Translate</span>
+        <a href="/" style="color:#94a3b8;text-decoration:none;font-size:0.9rem;">Home</a>
+        <a href="/about" style="color:#94a3b8;text-decoration:none;font-size:0.9rem;">About</a>
+        <a href="/architecture" style="color:#94a3b8;text-decoration:none;font-size:0.9rem;">Architecture</a>
+        <a href="/glossary" style="color:#3b82f6;text-decoration:none;font-size:0.9rem;">Glossary</a>
+    </nav>
+    <div class="container">
+        <h1>Islamic Terminology Glossary</h1>
+        <p class="subtitle">
+            Manage Arabic → Romanian transliteration rules for subtitle translation.
+        </p>
+
+        <!-- Add new term -->
+        <div class="add-form">
+            <h2>Add New Term</h2>
+            <div class="form-row">
+                <div class="field">
+                    <label>Arabic</label>
+                    <input id="newArabic" placeholder="e.g. صلاة" dir="rtl">
+                </div>
+                <div class="field">
+                    <label>Transliteration</label>
+                    <input id="newTranslit" placeholder="e.g. Salah">
+                </div>
+                <div class="field">
+                    <label>Romanian Explanation</label>
+                    <input id="newExplanation" placeholder="e.g. rugăciunea rituală">
+                </div>
+                <div class="field">
+                    <label>Rule</label>
+                    <input id="newRule" placeholder="e.g. First occurrence: 'Salah (rugăciunea rituală)'. After: just 'Salah'.">
+                </div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 1rem;">
+                <button class="btn" onclick="addTerm()">Add Term</button>
+                <span class="saved-msg" id="savedMsg">Saved!</span>
+            </div>
+        </div>
+
+        <!-- Glossary table -->
+        <table>
+            <thead>
+                <tr>
+                    <th>Arabic</th>
+                    <th>Transliteration</th>
+                    <th>Romanian</th>
+                    <th>Rule</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody id="glossaryBody"></tbody>
+        </table>
+    </div>
+
+    <script>
+    let glossary = {};
+
+    async function loadGlossary() {
+        const res = await fetch('/api/glossary');
+        glossary = await res.json();
+        renderTable();
+    }
+
+    function renderTable() {
+        const body = document.getElementById('glossaryBody');
+        const entries = Object.entries(glossary);
+        body.innerHTML = entries.map(([arabic, info]) => `
+            <tr>
+                <td class="arabic">${escapeHtml(arabic)}</td>
+                <td>${escapeHtml(info.transliteration)}</td>
+                <td>${escapeHtml(info.ro_explanation || '—')}</td>
+                <td style="font-size:0.8rem; color:#94a3b8;">${escapeHtml(info.rule || '')}</td>
+                <td><button class="btn-small btn-danger" onclick="deleteTerm('${escapeAttr(arabic)}')">Delete</button></td>
+            </tr>
+        `).join('');
+    }
+
+    async function addTerm() {
+        const arabic = document.getElementById('newArabic').value.trim();
+        const translit = document.getElementById('newTranslit').value.trim();
+        const explanation = document.getElementById('newExplanation').value.trim();
+        const rule = document.getElementById('newRule').value.trim();
+
+        if (!arabic || !translit) {
+            alert('Arabic and Transliteration are required.');
+            return;
+        }
+
+        glossary[arabic] = {
+            transliteration: translit,
+            ro_explanation: explanation,
+            rule: rule,
+        };
+
+        await saveGlossary();
+        renderTable();
+
+        // Clear form
+        document.getElementById('newArabic').value = '';
+        document.getElementById('newTranslit').value = '';
+        document.getElementById('newExplanation').value = '';
+        document.getElementById('newRule').value = '';
+
+        showSaved();
+    }
+
+    async function deleteTerm(arabic) {
+        if (!confirm(`Delete "${arabic}"?`)) return;
+        delete glossary[arabic];
+        await saveGlossary();
+        renderTable();
+        showSaved();
+    }
+
+    async function saveGlossary() {
+        await fetch('/api/glossary', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(glossary),
+        });
+    }
+
+    function showSaved() {
+        const msg = document.getElementById('savedMsg');
+        msg.classList.add('show');
+        setTimeout(() => msg.classList.remove('show'), 2000);
+    }
+
+    function escapeHtml(text) {
+        const el = document.createElement('span');
+        el.textContent = text || '';
+        return el.innerHTML;
+    }
+
+    function escapeAttr(text) {
+        return text.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+    }
+
+    loadGlossary();
+    </script>
+</body>
+</html>

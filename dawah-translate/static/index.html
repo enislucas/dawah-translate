@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dawah-Translate</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background: #0f172a;
+            color: #e2e8f0;
+            min-height: 100vh;
+        }
+        .container { max-width: 800px; margin: 0 auto; padding: 2rem; }
+        h1 {
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+            color: #f8fafc;
+        }
+        .subtitle {
+            color: #94a3b8;
+            margin-bottom: 2rem;
+            font-size: 0.95rem;
+        }
+
+        /* Form */
+        .card {
+            background: #1e293b;
+            border-radius: 12px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            border: 1px solid #334155;
+        }
+        .form-group { margin-bottom: 1.5rem; }
+        label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            color: #cbd5e1;
+            font-size: 0.9rem;
+        }
+        input[type="text"], select {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            background: #0f172a;
+            border: 1px solid #475569;
+            border-radius: 8px;
+            color: #f1f5f9;
+            font-size: 1rem;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        input[type="text"]:focus, select:focus {
+            border-color: #3b82f6;
+        }
+        input::placeholder { color: #64748b; }
+        .hint {
+            font-size: 0.8rem;
+            color: #64748b;
+            margin-top: 0.3rem;
+        }
+        .row { display: flex; gap: 1rem; }
+        .row .form-group { flex: 1; }
+
+        button {
+            padding: 0.8rem 2rem;
+            background: #3b82f6;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+            width: 100%;
+        }
+        button:hover { background: #2563eb; }
+        button:disabled {
+            background: #475569;
+            cursor: not-allowed;
+        }
+
+        /* Status */
+        .status-box {
+            display: none;
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+        }
+        .status-box.visible { display: block; }
+        .status-box .job-id {
+            font-family: monospace;
+            color: #3b82f6;
+            font-size: 1.1rem;
+        }
+        .status-box .progress {
+            margin-top: 0.5rem;
+            color: #94a3b8;
+        }
+        .status-box a {
+            color: #3b82f6;
+            text-decoration: none;
+        }
+        .status-box a:hover { text-decoration: underline; }
+
+        /* Job list */
+        .job-list h2 {
+            font-size: 1.3rem;
+            margin-bottom: 1rem;
+            color: #f8fafc;
+        }
+        .job-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem;
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 8px;
+            margin-bottom: 0.5rem;
+            text-decoration: none;
+            color: inherit;
+            transition: border-color 0.2s;
+        }
+        .job-item:hover { border-color: #3b82f6; }
+        .job-item .title {
+            font-weight: 600;
+            color: #f1f5f9;
+            font-size: 0.95rem;
+        }
+        .job-item .meta {
+            font-size: 0.8rem;
+            color: #64748b;
+            margin-top: 0.25rem;
+        }
+        .badge {
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+        .badge.queued, .badge.downloading, .badge.transcribing, .badge.translating {
+            background: #1e3a5f;
+            color: #60a5fa;
+        }
+        .badge.ready_for_review {
+            background: #14532d;
+            color: #4ade80;
+        }
+        .badge.burning {
+            background: #713f12;
+            color: #fbbf24;
+        }
+        .badge.complete {
+            background: #14532d;
+            color: #22c55e;
+        }
+        .badge.error {
+            background: #450a0a;
+            color: #f87171;
+        }
+        .empty-state {
+            text-align: center;
+            color: #64748b;
+            padding: 2rem;
+        }
+    </style>
+</head>
+<body>
+    <nav style="background:#1e293b;border-bottom:1px solid #334155;padding:0.75rem 2rem;display:flex;align-items:center;gap:2rem;">
+        <span style="font-weight:700;font-size:1.1rem;color:#f8fafc;margin-right:auto;">Dawah-Translate</span>
+        <a href="/" style="color:#3b82f6;text-decoration:none;font-size:0.9rem;">Home</a>
+        <a href="/about" style="color:#94a3b8;text-decoration:none;font-size:0.9rem;">About</a>
+        <a href="/architecture" style="color:#94a3b8;text-decoration:none;font-size:0.9rem;">Architecture</a>
+        <a href="/glossary" style="color:#94a3b8;text-decoration:none;font-size:0.9rem;">Glossary</a>
+    </nav>
+    <div class="container">
+        <h1>Dawah-Translate</h1>
+        <p class="subtitle">YouTube video translation pipeline for Romanian dawah content</p>
+
+        <!-- Submit Form -->
+        <div class="card">
+            <form id="submitForm">
+                <div class="form-group">
+                    <label for="url">YouTube URL</label>
+                    <input type="text" id="url" placeholder="https://www.youtube.com/watch?v=..." required>
+                </div>
+                <div class="row">
+                    <div class="form-group">
+                        <label for="source_language">Source Language</label>
+                        <select id="source_language">
+                            <option value="ar">Arabic (Fusha)</option>
+                            <option value="en">English</option>
+                            <option value="auto" selected>Auto-detect</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="whisper_model">Whisper Model</label>
+                        <select id="whisper_model">
+                            <option value="medium">Medium (faster)</option>
+                            <option value="large-v3" selected>Large-v3 (more accurate)</option>
+                        </select>
+                        <p class="hint">Large-v3 is ~3x slower but more accurate for Arabic</p>
+                    </div>
+                    <div class="form-group">
+                        <label for="translation_engine">Translation Engine</label>
+                        <select id="translation_engine" onchange="toggleClaudeModel()">
+                            <option value="local" selected>Local / NLLB-200 (free)</option>
+                            <option value="api">Claude API (paid, higher quality)</option>
+                        </select>
+                        <p class="hint">Local runs entirely on your machine — no API costs</p>
+                    </div>
+                    <div class="form-group" id="claudeModelGroup" style="display: none;">
+                        <label for="claude_model">Claude Model</label>
+                        <select id="claude_model">
+                            <option value="sonnet" selected>Sonnet (standard)</option>
+                            <option value="opus">Opus (difficult content)</option>
+                        </select>
+                    </div>
+                </div>
+                <button type="submit" id="submitBtn">Start Translation</button>
+            </form>
+        </div>
+
+        <!-- Status Box -->
+        <div class="status-box" id="statusBox">
+            <div>Job ID: <span class="job-id" id="statusJobId"></span></div>
+            <div class="progress" id="statusProgress">Submitting...</div>
+            <div id="statusLink" style="margin-top: 0.75rem; display: none;">
+                <a id="reviewLink" href="#">Open Review Page</a>
+            </div>
+        </div>
+
+        <!-- Job List -->
+        <div class="job-list">
+            <h2>Recent Jobs</h2>
+            <div id="jobList">
+                <div class="empty-state">No jobs yet. Submit a YouTube URL above to get started.</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const form = document.getElementById('submitForm');
+        const submitBtn = document.getElementById('submitBtn');
+        const statusBox = document.getElementById('statusBox');
+        const statusJobId = document.getElementById('statusJobId');
+        const statusProgress = document.getElementById('statusProgress');
+        const statusLink = document.getElementById('statusLink');
+        const reviewLink = document.getElementById('reviewLink');
+        const jobList = document.getElementById('jobList');
+
+        function toggleClaudeModel() {
+            const engine = document.getElementById('translation_engine').value;
+            document.getElementById('claudeModelGroup').style.display = engine === 'api' ? '' : 'none';
+        }
+
+        // Submit form
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Submitting...';
+
+            const data = {
+                url: document.getElementById('url').value.trim(),
+                source_language: document.getElementById('source_language').value,
+                whisper_model: document.getElementById('whisper_model').value,
+                translation_engine: document.getElementById('translation_engine').value,
+                claude_model: document.getElementById('claude_model').value,
+            };
+
+            try {
+                const res = await fetch('/api/submit', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data),
+                });
+                const result = await res.json();
+
+                if (result.job_id) {
+                    statusBox.classList.add('visible');
+                    statusJobId.textContent = result.job_id;
+                    statusProgress.textContent = 'Job queued...';
+                    pollStatus(result.job_id);
+                } else {
+                    alert('Error: ' + JSON.stringify(result));
+                }
+            } catch (err) {
+                alert('Error submitting job: ' + err.message);
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Start Translation';
+            }
+        });
+
+        // Poll job status
+        let pollTimer = null;
+        function pollStatus(jobId) {
+            if (pollTimer) clearInterval(pollTimer);
+            pollTimer = setInterval(async () => {
+                try {
+                    const res = await fetch(`/api/status/${jobId}`);
+                    const info = await res.json();
+                    statusProgress.textContent = info.progress || info.status;
+
+                    if (info.status === 'ready_for_review' || info.status === 'complete') {
+                        statusLink.style.display = 'block';
+                        reviewLink.href = `/review/${jobId}`;
+                        reviewLink.textContent = 'Open Review Page';
+                        clearInterval(pollTimer);
+                        loadJobs();
+                    } else if (info.status === 'error') {
+                        statusProgress.textContent = 'Error: ' + (info.error || 'Unknown error');
+                        clearInterval(pollTimer);
+                        loadJobs();
+                    }
+                } catch (err) {
+                    // Ignore polling errors
+                }
+            }, 3000);
+        }
+
+        // Load job list
+        async function loadJobs() {
+            try {
+                const res = await fetch('/api/jobs');
+                const jobs = await res.json();
+
+                if (jobs.length === 0) {
+                    jobList.innerHTML = '<div class="empty-state">No jobs yet.</div>';
+                    return;
+                }
+
+                jobList.innerHTML = jobs.map(job => {
+                    const title = job.video_title || 'Processing...';
+                    const date = job.created_at ? new Date(job.created_at).toLocaleString() : '';
+                    const status = job.status || 'unknown';
+                    const href = (status === 'ready_for_review' || status === 'complete')
+                        ? `/review/${job.job_id}`
+                        : '#';
+
+                    const retryBtn = status === 'error'
+                        ? `<button class="badge" style="cursor:pointer; border:none; background:#1e3a5f; color:#60a5fa;" onclick="event.preventDefault(); retryJob('${job.job_id}')">Retry</button>`
+                        : '';
+
+                    return `<a class="job-item" href="${href}">
+                        <div>
+                            <div class="title">${escapeHtml(title)}</div>
+                            <div class="meta">${escapeHtml(job.job_id)} &middot; ${date}</div>
+                        </div>
+                        <div style="display:flex; gap:0.5rem; align-items:center;">
+                            ${retryBtn}
+                            <span class="badge ${status}">${status.replace(/_/g, ' ')}</span>
+                        </div>
+                    </a>`;
+                }).join('');
+            } catch (err) {
+                // Ignore errors
+            }
+        }
+
+        async function retryJob(jobId) {
+            try {
+                const res = await fetch(`/api/retry/${jobId}`, { method: 'POST' });
+                const result = await res.json();
+                if (result.status === 'retrying') {
+                    statusBox.classList.add('visible');
+                    statusJobId.textContent = jobId;
+                    statusProgress.textContent = 'Retrying...';
+                    pollStatus(jobId);
+                    loadJobs();
+                } else {
+                    alert('Retry failed: ' + JSON.stringify(result));
+                }
+            } catch (err) {
+                alert('Retry error: ' + err.message);
+            }
+        }
+
+        function escapeHtml(text) {
+            const el = document.createElement('span');
+            el.textContent = text;
+            return el.innerHTML;
+        }
+
+        // Load jobs on page load and refresh periodically
+        loadJobs();
+        setInterval(loadJobs, 10000);
+    </script>
+</body>
+</html>
