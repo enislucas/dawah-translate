@@ -2,71 +2,511 @@
   "صلاة": {
     "transliteration": "Salah",
     "ro_explanation": "rugăciunea rituală",
-    "rule": "First occurrence: 'Salah (rugăciunea rituală)'. After: just 'Salah'."
+    "category": "pillars",
+    "rule": "First occurrence: 'Salah (rugăciunea rituală)'. After: just 'Salah'. NOTE: In 'الصلاة والسلام على' this means divine blessing, NOT ritual prayer."
   },
   "دعاء": {
     "transliteration": "du'a",
     "ro_explanation": "invocație",
+    "category": "worship",
     "rule": "First occurrence: 'du'a (invocație)'. After: just 'du'a'."
   },
   "زكاة": {
     "transliteration": "Zakah",
     "ro_explanation": "dania obligatorie",
+    "category": "pillars",
     "rule": "First occurrence: 'Zakah (dania obligatorie)'. After: just 'Zakah'."
+  },
+  "صوم": {
+    "transliteration": "sawm",
+    "ro_explanation": "postul",
+    "category": "pillars",
+    "rule": "First occurrence: 'sawm (postul)'. After: just 'sawm'."
+  },
+  "حج": {
+    "transliteration": "Hajj",
+    "ro_explanation": "pelerinajul la Mecca",
+    "category": "pillars",
+    "rule": "First occurrence: 'Hajj (pelerinajul la Mecca)'. After: just 'Hajj'."
+  },
+  "عمرة": {
+    "transliteration": "Umrah",
+    "ro_explanation": "pelerinajul minor",
+    "category": "worship",
+    "rule": "First occurrence: 'Umrah (pelerinajul minor)'. After: just 'Umrah'."
   },
   "توحيد": {
     "transliteration": "Tawheed",
-    "ro_explanation": "unicitatea lui Dumnezeu",
-    "rule": "First occurrence: 'Tawheed (unicitatea lui Dumnezeu)'. After: just 'Tawheed'."
+    "ro_explanation": "monoteismul islamic",
+    "category": "aqeedah",
+    "rule": "First occurrence: 'Tawheed (monoteismul islamic)'. After: just 'Tawheed'. NEVER 'unificarea'."
   },
   "شرك": {
     "transliteration": "shirk",
-    "ro_explanation": "asociere",
-    "rule": "First occurrence: 'shirk (asociere)'. After: just 'shirk'."
+    "ro_explanation": "asocierea altor divinități cu Allah",
+    "category": "aqeedah",
+    "rule": "First occurrence: 'shirk (asociere)'. After: just 'shirk'. This is the greatest sin in Islam."
+  },
+  "كفر": {
+    "transliteration": "kufr",
+    "ro_explanation": "necredința",
+    "category": "aqeedah",
+    "rule": "First occurrence: 'kufr (necredința)'. After: just 'kufr'."
+  },
+  "إيمان": {
+    "transliteration": "iman",
+    "ro_explanation": "credința",
+    "category": "aqeedah",
+    "rule": "First occurrence: 'iman (credința)'. After: just 'iman'."
+  },
+  "عقيدة": {
+    "transliteration": "aqeedah",
+    "ro_explanation": "crezul islamic",
+    "category": "aqeedah",
+    "rule": "First occurrence: 'aqeedah (crezul islamic)'. After: just 'aqeedah'."
+  },
+  "بدعة": {
+    "transliteration": "bid'ah",
+    "ro_explanation": "inovație în religie",
+    "category": "aqeedah",
+    "rule": "First occurrence: 'bid'ah (inovație în religie)'. After: just 'bid'ah'. Negative connotation."
   },
   "سنة": {
     "transliteration": "Sunnah",
-    "ro_explanation": "",
-    "rule": "Always 'Sunnah'."
+    "ro_explanation": "tradiția profetică",
+    "category": "sources",
+    "rule": "Always 'Sunnah'. First occurrence may add '(tradiția profetică)'."
   },
   "حديث": {
     "transliteration": "hadith",
-    "ro_explanation": "",
-    "rule": "Always 'hadith'."
+    "ro_explanation": "relatare profetică",
+    "category": "sources",
+    "rule": "Always 'hadith'. Plural: 'ahadith' or 'hadithuri'."
+  },
+  "قرآن": {
+    "transliteration": "Quran",
+    "ro_explanation": "Coranul",
+    "category": "sources",
+    "rule": "Always 'Quran' or 'Coranul'. The uncreated speech of Allah."
+  },
+  "تفسير": {
+    "transliteration": "tafsir",
+    "ro_explanation": "exegeza Coranului",
+    "category": "sciences",
+    "rule": "First occurrence: 'tafsir (exegeza Coranului)'. After: just 'tafsir'."
+  },
+  "فقه": {
+    "transliteration": "fiqh",
+    "ro_explanation": "jurisprudență islamică",
+    "category": "sciences",
+    "rule": "First occurrence: 'fiqh (jurisprudență islamică)'. After: just 'fiqh'."
+  },
+  "شريعة": {
+    "transliteration": "Shariah",
+    "ro_explanation": "legea islamică",
+    "category": "sciences",
+    "rule": "First occurrence: 'Shariah (legea islamică)'. After: just 'Shariah'."
+  },
+  "تقوى": {
+    "transliteration": "taqwa",
+    "ro_explanation": "conștiința lui Allah",
+    "category": "virtues",
+    "rule": "First occurrence: 'taqwa (conștiința lui Allah)'. After: just 'taqwa'."
+  },
+  "صبر": {
+    "transliteration": "sabr",
+    "ro_explanation": "răbdare",
+    "category": "virtues",
+    "rule": "First occurrence: 'sabr (răbdare)'. After: just 'sabr'."
+  },
+  "توبة": {
+    "transliteration": "tawbah",
+    "ro_explanation": "pocăință",
+    "category": "worship",
+    "rule": "First occurrence: 'tawbah (pocăință)'. After: just 'tawbah'."
+  },
+  "توكل": {
+    "transliteration": "tawakkul",
+    "ro_explanation": "încrederea în Allah",
+    "category": "virtues",
+    "rule": "First occurrence: 'tawakkul (încrederea în Allah)'. After: just 'tawakkul'."
+  },
+  "إخلاص": {
+    "transliteration": "ikhlas",
+    "ro_explanation": "sinceritate",
+    "category": "virtues",
+    "rule": "First occurrence: 'ikhlas (sinceritate)'. After: just 'ikhlas'."
+  },
+  "جنة": {
+    "transliteration": "Jannah",
+    "ro_explanation": "Paradisul",
+    "category": "afterlife",
+    "rule": "First occurrence: 'Jannah (Paradisul)'. After: just 'Jannah'."
+  },
+  "نار": {
+    "transliteration": "Naar",
+    "ro_explanation": "Focul (Iadul)",
+    "category": "afterlife",
+    "rule": "First occurrence: 'Naar (Focul)'. After: just 'Naar' or 'Focul'."
+  },
+  "يوم القيامة": {
+    "transliteration": "Yawm al-Qiyamah",
+    "ro_explanation": "Ziua Judecății",
+    "category": "afterlife",
+    "rule": "Always: 'Ziua Judecății' or 'Yawm al-Qiyamah'."
+  },
+  "جهاد": {
+    "transliteration": "jihad",
+    "ro_explanation": "strădanie pe calea lui Allah",
+    "category": "worship",
+    "rule": "First occurrence: 'jihad (strădanie pe calea lui Allah)'. NEVER translate as 'război sfânt' (holy war)."
+  },
+  "دعوة": {
+    "transliteration": "da'wah",
+    "ro_explanation": "chemarea la Islam",
+    "category": "worship",
+    "rule": "First occurrence: 'da'wah (chemarea la Islam)'. After: just 'da'wah'. NEVER 'consiliul'."
+  },
+  "خطبة": {
+    "transliteration": "khutbah",
+    "ro_explanation": "predica",
+    "category": "worship",
+    "rule": "First occurrence: 'khutbah (predica)'. After: just 'khutbah'."
+  },
+  "فتوى": {
+    "transliteration": "fatwa",
+    "ro_explanation": "verdict religios",
+    "category": "sciences",
+    "rule": "First occurrence: 'fatwa (verdict religios)'. After: just 'fatwa'."
+  },
+  "مسجد": {
+    "transliteration": "masjid",
+    "ro_explanation": "moschee",
+    "category": "places",
+    "rule": "Can use 'masjid' or 'moschee'."
+  },
+  "وضوء": {
+    "transliteration": "wudu",
+    "ro_explanation": "abluțiunea rituală",
+    "category": "worship",
+    "rule": "First occurrence: 'wudu (abluțiunea rituală)'. After: just 'wudu'."
+  },
+  "غسل": {
+    "transliteration": "ghusl",
+    "ro_explanation": "baia rituală completă",
+    "category": "worship",
+    "rule": "First occurrence: 'ghusl (baia rituală completă)'. After: just 'ghusl'."
+  },
+  "نية": {
+    "transliteration": "niyyah",
+    "ro_explanation": "intenția",
+    "category": "worship",
+    "rule": "First occurrence: 'niyyah (intenția)'. After: just 'niyyah'."
   },
   "إن شاء الله": {
     "transliteration": "in shaa Allah",
     "ro_explanation": "",
+    "category": "expressions",
     "rule": "Keep transliterated. Never translate."
   },
   "سبحان الله": {
     "transliteration": "SubhanAllah",
     "ro_explanation": "",
+    "category": "expressions",
     "rule": "Keep transliterated. Never translate."
   },
   "الحمد لله": {
     "transliteration": "Alhamdulillah",
     "ro_explanation": "",
+    "category": "expressions",
     "rule": "Keep transliterated. Never translate."
   },
   "الله أكبر": {
     "transliteration": "Allahu Akbar",
     "ro_explanation": "",
+    "category": "expressions",
     "rule": "Keep transliterated. Never translate."
   },
-  "تقوى": {
-    "transliteration": "taqwa",
-    "ro_explanation": "conștiința lui Dumnezeu",
-    "rule": "First occurrence: 'taqwa (conștiința lui Dumnezeu)'. After: just 'taqwa'."
+  "ما شاء الله": {
+    "transliteration": "ma shaa Allah",
+    "ro_explanation": "",
+    "category": "expressions",
+    "rule": "Keep transliterated. Never translate."
   },
-  "فقه": {
-    "transliteration": "fiqh",
-    "ro_explanation": "jurisprudență islamică",
-    "rule": "First occurrence: 'fiqh (jurisprudență islamică)'. After: just 'fiqh'."
+  "جزاك الله خيرا": {
+    "transliteration": "jazakAllahu khairan",
+    "ro_explanation": "Allah să te răsplătească cu bine",
+    "category": "expressions",
+    "rule": "Keep transliterated or translate. First occurrence with explanation."
   },
-  "عقيدة": {
-    "transliteration": "aqeedah",
-    "ro_explanation": "credință",
-    "rule": "First occurrence: 'aqeedah (credință)'. After: just 'aqeedah'."
+  "لا إله إلا الله": {
+    "transliteration": "La ilaha illAllah",
+    "ro_explanation": "Nu există divinitate în afară de Allah",
+    "category": "aqeedah",
+    "rule": "The shahada. Always transliterate. First occurrence with explanation."
+  },
+  "أستغفر الله": {
+    "transliteration": "astaghfirullah",
+    "ro_explanation": "cer iertare de la Allah",
+    "category": "expressions",
+    "rule": "Keep transliterated. Never translate."
+  },
+  "سماحة": {
+    "transliteration": "Samahatu",
+    "ro_explanation": "Eminența Sa",
+    "category": "honorifics",
+    "rule": "Honorific title for senior scholars. Always: 'Eminența Sa'. NEVER 'semana' (week)."
+  },
+  "الجليل": {
+    "transliteration": "",
+    "ro_explanation": "cel ilustru",
+    "category": "honorifics",
+    "rule": "When following a person/title: adjective 'cel ilustru'. NEVER translate as 'Galileea' (Galilee)."
+  },
+  "سيدنا": {
+    "transliteration": "Sayyiduna",
+    "ro_explanation": "stăpânul nostru",
+    "category": "honorifics",
+    "rule": "Always masculine: 'stăpânul nostru'. NEVER 'doamna noastră'. Refers to prophets/scholars."
+  },
+  "فضيلة": {
+    "transliteration": "",
+    "ro_explanation": "Excelența Sa",
+    "category": "honorifics",
+    "rule": "Honorific for scholars. Always: 'Excelența Sa'. NEVER 'fazali'."
+  },
+  "شيخ": {
+    "transliteration": "Sheikh",
+    "ro_explanation": "învățat/erudit islamic",
+    "category": "honorifics",
+    "rule": "Always 'Sheikh'. Can add context: 'Sheikh (învățatul)'."
+  },
+  "إمام": {
+    "transliteration": "imam",
+    "ro_explanation": "conducătorul rugăciunii / erudit",
+    "category": "honorifics",
+    "rule": "Always 'imam'. Context-dependent: prayer leader or senior scholar."
+  },
+  "مفتي": {
+    "transliteration": "mufti",
+    "ro_explanation": "jurist islamic suprem",
+    "category": "honorifics",
+    "rule": "Always 'mufti'."
+  },
+  "الإسلام": {
+    "transliteration": "Islam",
+    "ro_explanation": "",
+    "category": "aqeedah",
+    "rule": "Always 'Islam' or 'Islamul'. NEVER 'islamism' or 'islamismul'. Religion, not political ideology."
+  },
+  "التوحيد": {
+    "transliteration": "Tawheed",
+    "ro_explanation": "monoteismul islamic",
+    "category": "aqeedah",
+    "rule": "First occurrence: 'Tawheed (monoteismul islamic)'. After: just 'Tawheed'. NEVER 'unificarea'."
+  },
+  "العاقبة": {
+    "transliteration": "",
+    "ro_explanation": "sfârșitul bun",
+    "category": "aqeedah",
+    "rule": "In du'a context: 'sfârșitul bun' or 'izbânda'. NEVER 'pedeapsa' (punishment). Meaning is the opposite."
+  },
+  "الدعوة": {
+    "transliteration": "da'wah",
+    "ro_explanation": "chemarea la Islam",
+    "category": "worship",
+    "rule": "First occurrence: 'da'wah (chemarea la Islam)'. After: just 'da'wah'. NEVER 'consiliul'."
+  },
+  "خليل الله": {
+    "transliteration": "Khalilullah",
+    "ro_explanation": "cel ales de Dumnezeu",
+    "category": "honorifics",
+    "rule": "Title of Prophet Ibrahim. 'Cel ales de Dumnezeu'. NEVER feminine."
+  },
+  "الجزيرة العربية": {
+    "transliteration": "",
+    "ro_explanation": "Peninsula Arabă",
+    "category": "geography",
+    "rule": "Always 'Peninsula Arabă'. NEVER 'insula arabă' (Arabian island)."
+  },
+  "الصلاة والسلام على": {
+    "transliteration": "",
+    "ro_explanation": "binecuvântarea și pacea fie asupra",
+    "category": "expressions",
+    "rule": "Salawat formula. صلاة here = divine blessing, NOT ritual prayer. Always: 'Binecuvântarea și pacea fie asupra...'."
+  },
+  "صلى الله عليه وسلم": {
+    "transliteration": "sallallahu alayhi wa sallam",
+    "ro_explanation": "pacea și binecuvântarea lui Allah fie asupra sa",
+    "category": "expressions",
+    "rule": "Blessing upon the Prophet. Keep transliterated or use Romanian equivalent. Never drop it."
+  },
+  "رضي الله عنه": {
+    "transliteration": "radiallahu anhu",
+    "ro_explanation": "Allah să fie mulțumit de el",
+    "category": "expressions",
+    "rule": "Honorific for companions. Keep transliterated or abbreviate."
+  },
+  "رضي الله عنها": {
+    "transliteration": "radiallahu anha",
+    "ro_explanation": "Allah să fie mulțumită de ea",
+    "category": "expressions",
+    "rule": "Feminine form for female companions/wives of the Prophet."
+  },
+  "بسم الله الرحمن الرحيم": {
+    "transliteration": "Bismillah ir-Rahman ir-Rahim",
+    "ro_explanation": "În numele lui Allah, Cel Milostiv, Cel Îndurător",
+    "category": "expressions",
+    "rule": "The Basmala. First occurrence with explanation, after just 'Bismillah'."
+  },
+  "أهل السنة والجماعة": {
+    "transliteration": "Ahl us-Sunnah wal-Jama'ah",
+    "ro_explanation": "adepții Sunnei și ai comunității",
+    "category": "aqeedah",
+    "rule": "The mainstream Sunni orthodoxy. First occurrence with explanation."
+  },
+  "صحابة": {
+    "transliteration": "Sahabah",
+    "ro_explanation": "companionii Profetului",
+    "category": "history",
+    "rule": "First occurrence: 'Sahabah (companionii Profetului)'. After: just 'Sahabah'."
+  },
+  "تابعين": {
+    "transliteration": "Tabi'in",
+    "ro_explanation": "urmașii companionilor",
+    "category": "history",
+    "rule": "First occurrence: 'Tabi'in (urmașii companionilor)'. After: just 'Tabi'in'."
+  },
+  "سلف": {
+    "transliteration": "Salaf",
+    "ro_explanation": "predecesorii pioși",
+    "category": "history",
+    "rule": "First occurrence: 'Salaf (predecesorii pioși)'. Refers to the first 3 generations."
+  },
+  "أمة": {
+    "transliteration": "Ummah",
+    "ro_explanation": "comunitatea islamică",
+    "category": "community",
+    "rule": "First occurrence: 'Ummah (comunitatea islamică)'. After: just 'Ummah'."
+  },
+  "حلال": {
+    "transliteration": "halal",
+    "ro_explanation": "permis",
+    "category": "fiqh",
+    "rule": "Always 'halal'. Can add '(permis)' first occurrence."
+  },
+  "حرام": {
+    "transliteration": "haram",
+    "ro_explanation": "interzis",
+    "category": "fiqh",
+    "rule": "Always 'haram'. Can add '(interzis)' first occurrence."
+  },
+  "واجب": {
+    "transliteration": "wajib",
+    "ro_explanation": "obligatoriu",
+    "category": "fiqh",
+    "rule": "First occurrence: 'wajib (obligatoriu)'. After: just 'wajib'."
+  },
+  "مستحب": {
+    "transliteration": "mustahabb",
+    "ro_explanation": "recomandat",
+    "category": "fiqh",
+    "rule": "First occurrence: 'mustahabb (recomandat)'. After: just 'mustahabb'."
+  },
+  "مكروه": {
+    "transliteration": "makruh",
+    "ro_explanation": "dezaprobat",
+    "category": "fiqh",
+    "rule": "First occurrence: 'makruh (dezaprobat)'. After: just 'makruh'."
+  },
+  "رب": {
+    "transliteration": "Rabb",
+    "ro_explanation": "Stăpânul/Domnul",
+    "category": "names_of_allah",
+    "rule": "One of Allah's names. Can translate as 'Domnul' or keep 'Rabb'."
+  },
+  "الرحمن": {
+    "transliteration": "Ar-Rahman",
+    "ro_explanation": "Cel Milostiv",
+    "category": "names_of_allah",
+    "rule": "Name of Allah. 'Cel Milostiv' or 'Ar-Rahman'."
+  },
+  "الرحيم": {
+    "transliteration": "Ar-Rahim",
+    "ro_explanation": "Cel Îndurător",
+    "category": "names_of_allah",
+    "rule": "Name of Allah. 'Cel Îndurător' or 'Ar-Rahim'."
+  },
+  "شهادة": {
+    "transliteration": "Shahada",
+    "ro_explanation": "mărturisirea de credință",
+    "category": "pillars",
+    "rule": "First occurrence: 'Shahada (mărturisirea de credință)'. After: just 'Shahada'."
+  },
+  "ركعة": {
+    "transliteration": "rak'ah",
+    "ro_explanation": "unitate de rugăciune",
+    "category": "worship",
+    "rule": "First occurrence: 'rak'ah (unitate de rugăciune)'. Plural: 'raka'at'."
+  },
+  "سجدة": {
+    "transliteration": "sajdah",
+    "ro_explanation": "prosternare",
+    "category": "worship",
+    "rule": "First occurrence: 'sajdah (prosternare)'. After: just 'sajdah'."
+  },
+  "ذكر": {
+    "transliteration": "dhikr",
+    "ro_explanation": "amintirea lui Allah",
+    "category": "worship",
+    "rule": "First occurrence: 'dhikr (amintirea lui Allah)'. After: just 'dhikr'."
+  },
+  "رمضان": {
+    "transliteration": "Ramadan",
+    "ro_explanation": "",
+    "category": "calendar",
+    "rule": "Always 'Ramadan'."
+  },
+  "عيد": {
+    "transliteration": "Eid",
+    "ro_explanation": "sărbătoare islamică",
+    "category": "calendar",
+    "rule": "Always 'Eid'. 'Eid al-Fitr' and 'Eid al-Adha'."
+  },
+  "قبلة": {
+    "transliteration": "qiblah",
+    "ro_explanation": "direcția de rugăciune",
+    "category": "worship",
+    "rule": "First occurrence: 'qiblah (direcția de rugăciune)'. After: just 'qiblah'."
+  },
+  "كعبة": {
+    "transliteration": "Ka'bah",
+    "ro_explanation": "",
+    "category": "places",
+    "rule": "Always 'Ka'bah'."
+  },
+  "منافق": {
+    "transliteration": "munafiq",
+    "ro_explanation": "ipocrit",
+    "category": "aqeedah",
+    "rule": "First occurrence: 'munafiq (ipocrit)'. After: just 'munafiq'."
+  },
+  "ملائكة": {
+    "transliteration": "mala'ikah",
+    "ro_explanation": "îngeri",
+    "category": "aqeedah",
+    "rule": "Can use 'îngeri' or 'mala'ikah'. First occurrence with explanation."
+  },
+  "جن": {
+    "transliteration": "jinn",
+    "ro_explanation": "ființe invizibile create din foc",
+    "category": "aqeedah",
+    "rule": "First occurrence: 'jinn (ființe invizibile create din foc)'. NEVER 'geniu/djin'."
+  },
+  "شيطان": {
+    "transliteration": "Shaytan",
+    "ro_explanation": "diavolul",
+    "category": "aqeedah",
+    "rule": "Can use 'Shaytan' or 'diavolul'. Iblis = name of the chief shaytan."
   }
 }

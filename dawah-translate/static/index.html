@@ -209,10 +209,14 @@
                     <div class="form-group">
                         <label for="translation_engine">Translation Engine</label>
                         <select id="translation_engine" onchange="toggleClaudeModel()">
-                            <option value="local" selected>Local / NLLB-200 (free)</option>
-                            <option value="api">Claude API (paid, higher quality)</option>
+                            <option value="local_quality" selected>Local Quality / NLLB + Ollama (free, recommended)</option>
+                            <option value="local_fast">Local Fast / NLLB only (free, lower quality)</option>
+                            <option value="cloud">Cloud / Claude API (paid, best quality)</option>
                         </select>
-                        <p class="hint">Local runs entirely on your machine — no API costs</p>
+                        <p class="hint" id="engineHint">NLLB draft + local LLM refinement. Requires Ollama running.</p>
+                        <div id="ollamaWarning" style="display:none; margin-top:0.4rem; padding:0.5rem; background:#450a0a; border-radius:6px; font-size:0.8rem; color:#f87171;">
+                            Ollama is not running. Start it with: <code>ollama serve</code> &mdash; or switch to "Local Fast".
+                        </div>
                     </div>
                     <div class="form-group" id="claudeModelGroup" style="display: none;">
                         <label for="claude_model">Claude Model</label>
@@ -256,8 +260,29 @@
 
         function toggleClaudeModel() {
             const engine = document.getElementById('translation_engine').value;
-            document.getElementById('claudeModelGroup').style.display = engine === 'api' ? '' : 'none';
+            document.getElementById('claudeModelGroup').style.display = engine === 'cloud' ? '' : 'none';
+            const hints = {
+                'local_fast': 'NLLB-200 only. Fast (~20s) but lower quality. No extra requirements.',
+                'local_quality': 'NLLB draft + local LLM refinement. Requires Ollama running.',
+                'cloud': 'Claude API. Best quality but costs ~$0.50-3 per video. Requires API key.',
+            };
+            document.getElementById('engineHint').textContent = hints[engine] || '';
+            if (engine === 'local_quality') checkOllama();
+            else document.getElementById('ollamaWarning').style.display = 'none';
         }
+
+        async function checkOllama() {
+            try {
+                const res = await fetch('/api/ollama/status');
+                const data = await res.json();
+                document.getElementById('ollamaWarning').style.display = data.running ? 'none' : 'block';
+            } catch (e) {
+                document.getElementById('ollamaWarning').style.display = 'block';
+            }
+        }
+
+        // Check Ollama on load since local_quality is default
+        checkOllama();
 
         // Submit form
         form.addEventListener('submit', async (e) => {

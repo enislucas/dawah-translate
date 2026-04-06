@@ -14,6 +14,9 @@ build/
 # Jobs (large video/audio files)
 dawah-translate/jobs/
 
+# Translation memory (user-specific, regenerated from edits)
+dawah-translate/translation_memory.db
+
 # IDE
 .vscode/
 .idea/

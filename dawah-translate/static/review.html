@@ -226,6 +226,92 @@
             border-radius: 3px;
             font-family: monospace;
         }
+
+        /* Quality banner */
+        .quality-banner {
+            display: none;
+            padding: 0.6rem 1.5rem;
+            font-size: 0.85rem;
+            font-weight: 600;
+            flex-shrink: 0;
+        }
+        .quality-banner.good {
+            display: flex;
+            background: #14532d;
+            color: #4ade80;
+            border-bottom: 1px solid #166534;
+        }
+        .quality-banner.warnings {
+            display: flex;
+            background: #713f12;
+            color: #fbbf24;
+            border-bottom: 1px solid #854d0e;
+        }
+        .quality-banner.critical {
+            display: flex;
+            background: #450a0a;
+            color: #f87171;
+            border-bottom: 1px solid #7f1d1d;
+        }
+        .quality-banner .score {
+            margin-left: auto;
+            font-family: monospace;
+        }
+
+        /* Quality flags on rows */
+        tr.quality-critical { border-left: 3px solid #ef4444 !important; }
+        tr.quality-critical td:first-child { position: relative; }
+        tr.quality-critical td:first-child::before {
+            content: "!!";
+            position: absolute;
+            left: 2px;
+            top: 2px;
+            font-size: 0.65rem;
+            color: #ef4444;
+            font-weight: 700;
+        }
+        tr.quality-warning { border-left: 3px solid #f59e0b !important; }
+        tr.quality-warning td:first-child::before {
+            content: "!";
+            position: absolute;
+            left: 4px;
+            top: 2px;
+            font-size: 0.65rem;
+            color: #f59e0b;
+            font-weight: 700;
+        }
+
+        /* Quality flags tooltip */
+        .quality-flags {
+            margin-top: 0.4rem;
+            font-size: 0.75rem;
+            line-height: 1.5;
+        }
+        .quality-flags .flag {
+            display: block;
+            padding: 0.15rem 0.4rem;
+            border-radius: 3px;
+            margin-bottom: 0.15rem;
+        }
+        .quality-flags .flag.critical {
+            background: rgba(239, 68, 68, 0.15);
+            color: #fca5a5;
+        }
+        .quality-flags .flag.warning {
+            background: rgba(245, 158, 11, 0.15);
+            color: #fcd34d;
+        }
+        .quality-flags .flag.info {
+            background: rgba(59, 130, 246, 0.1);
+            color: #93c5fd;
+        }
+
+        /* Quality score in col */
+        .col-quality { width: 3.5rem; text-align: center; }
+        .qscore { font-family: monospace; font-size: 0.8rem; font-weight: 600; }
+        .qscore.good { color: #4ade80; }
+        .qscore.ok { color: #fbbf24; }
+        .qscore.bad { color: #f87171; }
     </style>
 </head>
 <body>
@@ -249,6 +335,12 @@
             </div>
         </div>
 
+        <!-- Quality Banner -->
+        <div class="quality-banner" id="qualityBanner">
+            <span id="qualityText"></span>
+            <span class="score" id="qualityScore"></span>
+        </div>
+
         <!-- Video -->
         <div class="video-section">
             <video id="video" controls preload="auto"></video>
@@ -265,6 +357,7 @@
                         <th class="col-original">Original</th>
                         <th class="col-romanian">Romanian (editable)</th>
                         <th class="col-speed">CPS</th>
+                        <th class="col-quality">QA</th>
                         <th class="col-actions">Action</th>
                     </tr>
                 </thead>
@@ -275,8 +368,21 @@
         <!-- Bottom Bar -->
         <div class="bottom-bar">
             <div class="info" id="bottomInfo">Loading...</div>
-            <div style="display: flex; gap: 1rem; align-items: center;">
+            <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
                 <span id="burnStatus" style="color: #94a3b8; font-size: 0.9rem;"></span>
+                <!-- Export dropdown -->
+                <div style="position: relative; display: inline-block;">
+                    <button class="btn-small" onclick="toggleExportMenu()" style="padding: 0.6rem 1rem; font-size: 0.85rem;">Export</button>
+                    <div id="exportMenu" style="display:none; position:absolute; bottom:100%; right:0; background:#1e293b; border:1px solid #475569; border-radius:6px; padding:0.5rem; margin-bottom:4px; min-width:160px; z-index:20;">
+                        <a href="#" onclick="exportFormat('srt'); return false;" style="display:block;padding:0.4rem 0.6rem;color:#e2e8f0;text-decoration:none;font-size:0.85rem;border-radius:3px;">SRT (SubRip)</a>
+                        <a href="#" onclick="exportFormat('vtt'); return false;" style="display:block;padding:0.4rem 0.6rem;color:#e2e8f0;text-decoration:none;font-size:0.85rem;border-radius:3px;">VTT (WebVTT)</a>
+                        <a href="#" onclick="exportFormat('txt'); return false;" style="display:block;padding:0.4rem 0.6rem;color:#e2e8f0;text-decoration:none;font-size:0.85rem;border-radius:3px;">TXT (Transcript)</a>
+                        <a href="#" onclick="exportFormat('bilingual'); return false;" style="display:block;padding:0.4rem 0.6rem;color:#e2e8f0;text-decoration:none;font-size:0.85rem;border-radius:3px;">Bilingual SRT</a>
+                        <a href="#" onclick="exportFormat('ass'); return false;" style="display:block;padding:0.4rem 0.6rem;color:#e2e8f0;text-decoration:none;font-size:0.85rem;border-radius:3px;">ASS (Styled)</a>
+                    </div>
+                </div>
+                <button class="btn-small" onclick="saveToMemory()" title="Save reviewed translations to memory for future use" style="padding: 0.6rem 1rem; font-size: 0.85rem;">Save to Memory</button>
+                <button class="btn-small" onclick="refreshQuality()" title="Re-run quality checks after editing" style="padding: 0.6rem 1rem; font-size: 0.85rem;">Re-check Quality</button>
                 <button class="btn-primary" id="burnBtn" onclick="burnSubtitles()">
                     Approve &amp; Burn Subtitles
                 </button>
@@ -330,8 +436,38 @@
             showDownloadButton();
         }
 
+        // Load quality banner
+        loadQualityBanner();
+
         // Start subtitle sync
         video.addEventListener('timeupdate', syncSubtitles);
+    }
+
+    async function loadQualityBanner() {
+        try {
+            const res = await fetch(`/api/job/${jobId}/quality`);
+            const report = await res.json();
+            if (report.error) return;
+
+            const banner = document.getElementById('qualityBanner');
+            const text = document.getElementById('qualityText');
+            const score = document.getElementById('qualityScore');
+
+            score.textContent = `Score: ${report.average_score}/100`;
+
+            if (report.critical_count > 0) {
+                banner.className = 'quality-banner critical';
+                text.textContent = `${report.critical_count} creedal/critical issue(s) found — review required before publishing`;
+            } else if (report.warning_count > 0) {
+                banner.className = 'quality-banner warnings';
+                text.textContent = `${report.warning_count} warning(s) — review recommended`;
+            } else {
+                banner.className = 'quality-banner good';
+                text.textContent = report.summary || 'Quality checks passed';
+            }
+        } catch (e) {
+            // Quality report not available — that's OK
+        }
     }
 
     async function loadSubtitles() {
@@ -347,10 +483,28 @@
             const startTime = formatTime(seg.start);
             const endTime = formatTime(seg.end);
             const speedClass = seg.reading_speed > 21 ? 'danger' : seg.reading_speed > 18 ? 'warn' : 'ok';
-            const rowClass = seg.too_fast ? 'too-fast' : '';
+
+            // Quality classes
+            let rowClass = seg.too_fast ? 'too-fast' : '';
+            if (seg.has_critical) rowClass += ' quality-critical';
+            else if (seg.has_warning) rowClass += ' quality-warning';
+
+            // Quality score display
+            const qs = seg.quality_score;
+            const qsClass = qs >= 95 ? 'good' : qs >= 80 ? 'ok' : 'bad';
+            const qsDisplay = qs != null ? `<span class="qscore ${qsClass}">${qs}</span>` : '';
+
+            // Quality flags
+            let flagsHtml = '';
+            if (seg.quality_flags && seg.quality_flags.length > 0) {
+                flagsHtml = '<div class="quality-flags">' +
+                    seg.quality_flags.map(f =>
+                        `<span class="flag ${f.severity}" title="${escapeHtml(f.code)}">${escapeHtml(f.message)}</span>`
+                    ).join('') + '</div>';
+            }
 
             return `<tr id="row-${i}" class="${rowClass}" data-index="${i}" onclick="seekToSegment(${i})">
-                <td class="col-idx">${seg.index}</td>
+                <td class="col-idx" style="position:relative;">${seg.index}</td>
                 <td class="col-time">${startTime}<br>${endTime}</td>
                 <td class="col-original">${escapeHtml(seg.original_text)}</td>
                 <td class="col-romanian">
@@ -359,10 +513,12 @@
                          data-index="${i}"
                          onblur="onEditBlur(${i})"
                          onkeydown="onEditKeydown(event, ${i})">${escapeHtml(seg.text)}</div>
+                    ${flagsHtml}
                 </td>
                 <td class="col-speed">
                     <span class="speed ${speedClass}">${seg.reading_speed}</span>
                 </td>
+                <td class="col-quality">${qsDisplay}</td>
                 <td class="col-actions">
                     <button class="btn-small" onclick="event.stopPropagation(); retranslate(${i})" title="Re-translate this segment">Re-translate</button>
                 </td>
@@ -596,8 +752,79 @@
 
     function updateBottomInfo() {
         const total = segments.length;
-        const warnings = segments.filter(s => s.too_fast).length;
-        bottomInfo.textContent = `${total} segments` + (warnings ? ` | ${warnings} too fast (>21 CPS)` : ' | All within reading speed limits');
+        const tooFast = segments.filter(s => s.too_fast).length;
+        const critical = segments.filter(s => s.has_critical).length;
+        const warned = segments.filter(s => s.has_warning).length;
+
+        let parts = [`${total} segments`];
+        if (critical > 0) parts.push(`${critical} critical`);
+        if (warned > 0) parts.push(`${warned} warnings`);
+        if (tooFast > 0) parts.push(`${tooFast} too fast`);
+        if (critical === 0 && warned === 0 && tooFast === 0) parts.push('All checks passed');
+
+        bottomInfo.textContent = parts.join(' | ');
+    }
+
+    // ── Save to translation memory ────────────────────────────────
+    async function saveToMemory() {
+        try {
+            // Save edits first
+            await fetch(`/api/job/${jobId}/srt`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ segments }),
+            });
+
+            const res = await fetch(`/api/job/${jobId}/save-to-memory`, { method: 'POST' });
+            const result = await res.json();
+            if (result.entries) {
+                burnStatus.textContent = `Saved ${result.entries} entries to translation memory`;
+                setTimeout(() => { burnStatus.textContent = ''; }, 3000);
+            }
+        } catch (e) {
+            alert('Save to memory failed: ' + e.message);
+        }
+    }
+
+    // ── Export ────────────────────────────���──────────────────────────
+    function toggleExportMenu() {
+        const menu = document.getElementById('exportMenu');
+        menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+    }
+
+    function exportFormat(fmt) {
+        document.getElementById('exportMenu').style.display = 'none';
+        window.open(`/api/job/${jobId}/export/${fmt}`, '_blank');
+    }
+
+    // Close export menu on outside click
+    document.addEventListener('click', (e) => {
+        const menu = document.getElementById('exportMenu');
+        if (menu && !e.target.closest('#exportMenu') && !e.target.closest('[onclick*="toggleExportMenu"]')) {
+            menu.style.display = 'none';
+        }
+    });
+
+    // ── Refresh quality ─────────────────────────────────────────────
+    async function refreshQuality() {
+        try {
+            // Save edits first
+            await fetch(`/api/job/${jobId}/srt`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ segments }),
+            });
+
+            // Re-run quality
+            const res = await fetch(`/api/job/${jobId}/quality/refresh`, { method: 'POST' });
+            const report = await res.json();
+
+            // Reload subtitles (which now include updated quality data)
+            await loadSubtitles();
+            loadQualityBanner();
+        } catch (e) {
+            alert('Quality refresh failed: ' + e.message);
+        }
     }
 
     // ── Start ────────────────────────────────────────────────────────

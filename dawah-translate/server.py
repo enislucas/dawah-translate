@@ -31,8 +31,8 @@ class SubmitRequest(BaseModel):
     url: str
     source_language: str = "auto"
     whisper_model: str = "large-v3"
-    translation_engine: str = "local"  # "local" (NLLB-200) or "api" (Claude)
-    claude_model: str = "sonnet"       # Only used if translation_engine == "api"
+    translation_engine: str = "local_quality"  # "local_fast", "local_quality", or "cloud"
+    claude_model: str = "sonnet"               # Only used if translation_engine == "cloud"
 
 
 class SaveSrtRequest(BaseModel):
@@ -42,7 +42,7 @@ class SaveSrtRequest(BaseModel):
 class RetranslateRequest(BaseModel):
     segment_index: int
     source_language: str = "auto"
-    translation_engine: str = "local"
+    translation_engine: str = "local_quality"
     claude_model: str = "sonnet"
 
 
@@ -132,16 +132,35 @@ def run_pipeline(job_id: str, url: str, source_language: str,
         update_job_info(job_id, progress="Transcription complete, starting translation...")
 
         # Step 3: Translate
-        if translation_engine == "api":
+        if translation_engine == "cloud":
             update_job_info(job_id, status="translating", progress="Translating subtitles (Claude API)...")
             from pipeline.translate import run_translation
             run_translation(job_id, claude_model=claude_model)
         else:
-            update_job_info(job_id, status="translating", progress="Translating subtitles (NLLB-200 local)...")
+            # Both local_fast and local_quality start with NLLB
+            update_job_info(job_id, status="translating", progress="Translating subtitles (NLLB-200)...")
             from pipeline.translate_local import run_translation_local
             run_translation_local(job_id, language=source_language)
 
-        update_job_info(job_id, status="ready_for_review", progress="Ready for review!")
+            # local_quality adds Ollama post-editing
+            if translation_engine == "local_quality":
+                update_job_info(job_id, status="refining",
+                                progress="Refining translation with local LLM (Ollama)...")
+                from pipeline.translate_refine import run_refinement
+                run_refinement(job_id)
+
+        # Step 4: Quality validation
+        update_job_info(job_id, status="validating", progress="Running quality checks...")
+        from pipeline.quality import validate_job
+        quality_report = validate_job(job_id)
+        update_job_info(
+            job_id,
+            status="ready_for_review",
+            progress="Ready for review!",
+            quality_score=quality_report["average_score"],
+            quality_critical=quality_report["critical_count"],
+            quality_warnings=quality_report["warning_count"],
+        )
 
     except Exception as e:
         tb = traceback.format_exc()
@@ -267,16 +286,32 @@ def _run_retry(job_id, info, has_video, has_audio, has_original_srt, has_romania
 
         if not has_romanian_srt:
             # Need to translate
-            if translation_engine == "api":
+            if translation_engine == "cloud":
                 update_job_info(job_id, status="translating", progress="Translating (Claude API)...")
                 from pipeline.translate import run_translation
                 run_translation(job_id, claude_model=claude_model)
             else:
-                update_job_info(job_id, status="translating", progress="Translating (NLLB-200 local)...")
+                update_job_info(job_id, status="translating", progress="Translating (NLLB-200)...")
                 from pipeline.translate_local import run_translation_local
                 run_translation_local(job_id, language=source_language)
 
-        update_job_info(job_id, status="ready_for_review", progress="Ready for review!")
+                if translation_engine == "local_quality":
+                    update_job_info(job_id, status="refining", progress="Refining with local LLM...")
+                    from pipeline.translate_refine import run_refinement
+                    run_refinement(job_id)
+
+        # Quality validation
+        update_job_info(job_id, status="validating", progress="Running quality checks...")
+        from pipeline.quality import validate_job
+        quality_report = validate_job(job_id)
+        update_job_info(
+            job_id,
+            status="ready_for_review",
+            progress="Ready for review!",
+            quality_score=quality_report["average_score"],
+            quality_critical=quality_report["critical_count"],
+            quality_warnings=quality_report["warning_count"],
+        )
 
     except Exception as e:
         import traceback
@@ -310,6 +345,8 @@ async def list_jobs():
                         "video_title": info.get("video_title", ""),
                         "created_at": info.get("created_at", ""),
                         "progress": info.get("progress", ""),
+                        "quality_score": info.get("quality_score"),
+                        "quality_critical": info.get("quality_critical", 0),
                     })
     return jobs
 
@@ -378,11 +415,23 @@ async def get_srt(job_id: str):
         for seg in parse_srt(original_path):
             original_segments[seg["index"]] = seg["text"]
 
-    # Enrich with reading speed and original text
+    # Load quality report if available
+    quality_lookup = {}
+    report_path = JOBS_DIR / job_id / "quality_report.json"
+    if report_path.exists():
+        try:
+            with open(report_path, "r", encoding="utf-8") as f:
+                report = json.load(f)
+            for seg_report in report.get("segments", []):
+                quality_lookup[seg_report["index"]] = seg_report
+        except Exception:
+            pass
+
+    # Enrich with reading speed, original text, and quality flags
     result = []
     for seg in segments:
         speed = check_reading_speed(seg)
-        result.append({
+        entry = {
             "index": seg["index"],
             "start": seg["start"],
             "end": seg["end"],
@@ -390,7 +439,17 @@ async def get_srt(job_id: str):
             "original_text": original_segments.get(seg["index"], ""),
             "reading_speed": round(speed, 1),
             "too_fast": speed > 21,
-        })
+        }
+
+        # Add quality data if available
+        q = quality_lookup.get(seg["index"])
+        if q:
+            entry["quality_score"] = q["score"]
+            entry["quality_flags"] = q["flags"]
+            entry["has_critical"] = q["has_critical"]
+            entry["has_warning"] = q["has_warning"]
+
+        result.append(entry)
 
     return result
 
@@ -438,10 +497,20 @@ async def retranslate_segment(job_id: str, req: RetranslateRequest):
         return JSONResponse({"error": f"Segment {req.segment_index} not found"}, status_code=404)
 
     try:
-        if req.translation_engine == "api":
+        if req.translation_engine == "cloud":
             from pipeline.translate import translate_single_segment
             translated_text = await asyncio.to_thread(
                 translate_single_segment, segment, req.source_language
+            )
+        elif req.translation_engine == "local_quality":
+            # NLLB first, then Ollama refinement
+            from pipeline.translate_local import translate_single_segment_local
+            from pipeline.translate_refine import refine_single_segment
+            nllb_text = await asyncio.to_thread(
+                translate_single_segment_local, segment, req.source_language
+            )
+            translated_text = await asyncio.to_thread(
+                refine_single_segment, segment, nllb_text, req.source_language
             )
         else:
             from pipeline.translate_local import translate_single_segment_local
@@ -484,6 +553,127 @@ def _run_burn(job_id: str):
         tb = traceback.format_exc()
         print(f"Burn error for job {job_id}: {e}\n{tb}")
         update_job_info(job_id, status="error", error=str(e), progress=f"Burn error: {e}")
+
+
+@app.get("/api/ollama/status")
+async def ollama_status():
+    """Check if Ollama is running and which models are available."""
+    try:
+        from pipeline.translate_refine import check_ollama_running, OLLAMA_BASE_URL
+        import httpx
+        if not check_ollama_running():
+            return {"running": False, "models": []}
+        resp = httpx.get(f"{OLLAMA_BASE_URL}/api/tags", timeout=5.0)
+        models = [m.get("name", "") for m in resp.json().get("models", [])]
+        return {"running": True, "models": models}
+    except Exception:
+        return {"running": False, "models": []}
+
+
+@app.get("/api/job/{job_id}/quality")
+async def get_quality_report(job_id: str):
+    """Get quality report for a job. Generates it if not cached."""
+    report_path = JOBS_DIR / job_id / "quality_report.json"
+
+    if report_path.exists():
+        with open(report_path, "r", encoding="utf-8") as f:
+            return json.load(f)
+
+    # Generate on-demand if not cached
+    ro_srt = JOBS_DIR / job_id / "transcript_romanian.srt"
+    if not ro_srt.exists():
+        return JSONResponse({"error": "Romanian SRT not found"}, status_code=404)
+
+    from pipeline.quality import validate_job
+    report = validate_job(job_id)
+    return report
+
+
+@app.post("/api/job/{job_id}/quality/refresh")
+async def refresh_quality_report(job_id: str):
+    """Re-run quality validation (after edits)."""
+    ro_srt = JOBS_DIR / job_id / "transcript_romanian.srt"
+    if not ro_srt.exists():
+        return JSONResponse({"error": "Romanian SRT not found"}, status_code=404)
+
+    from pipeline.quality import validate_job
+    report = validate_job(job_id)
+    return report
+
+
+@app.get("/api/job/{job_id}/export/{fmt}")
+async def export_subtitles(job_id: str, fmt: str):
+    """Export subtitles in the given format (srt, vtt, txt, bilingual, ass)."""
+    valid_formats = {"srt", "vtt", "txt", "bilingual", "ass"}
+    if fmt not in valid_formats:
+        return JSONResponse({"error": f"Invalid format. Choose from: {valid_formats}"}, status_code=400)
+
+    from pipeline.export import export_job
+    try:
+        results = export_job(job_id, formats=[fmt])
+    except FileNotFoundError as e:
+        return JSONResponse({"error": str(e)}, status_code=404)
+
+    if fmt not in results:
+        return JSONResponse({"error": "Export failed"}, status_code=500)
+
+    filepath = results[fmt]
+    media_types = {
+        "srt": "application/x-subrip",
+        "vtt": "text/vtt",
+        "txt": "text/plain",
+        "bilingual": "application/x-subrip",
+        "ass": "text/x-ssa",
+    }
+    return FileResponse(filepath, media_type=media_types.get(fmt, "application/octet-stream"),
+                        filename=Path(filepath).name)
+
+
+@app.get("/api/job/{job_id}/exports")
+async def list_exports(job_id: str):
+    """List available export formats for a job."""
+    ro_srt = JOBS_DIR / job_id / "transcript_romanian.srt"
+    orig_srt = JOBS_DIR / job_id / "transcript_original.srt"
+
+    formats = []
+    if ro_srt.exists():
+        formats.extend(["srt", "vtt", "txt", "ass"])
+        if orig_srt.exists():
+            formats.append("bilingual")
+
+    return {"formats": formats}
+
+
+@app.post("/api/job/{job_id}/save-to-memory")
+async def save_to_translation_memory(job_id: str):
+    """Save all reviewed segments from a job to translation memory."""
+    info = read_job_info(job_id)
+    if not info:
+        return JSONResponse({"error": "Job not found"}, status_code=404)
+
+    from pipeline.memory import TranslationMemory
+    tm = TranslationMemory()
+    source_lang = info.get("source_language", "ar")
+    count = tm.store_job_corrections(job_id, source_lang)
+
+    return {"status": "saved", "entries": count}
+
+
+@app.get("/api/translation-memory/stats")
+async def translation_memory_stats():
+    """Get translation memory statistics."""
+    from pipeline.memory import TranslationMemory
+    tm = TranslationMemory()
+    return tm.get_stats()
+
+
+@app.get("/api/translation-memory/lookup")
+async def translation_memory_lookup(text: str, lang: str = "ar"):
+    """Look up a translation from memory."""
+    from pipeline.memory import TranslationMemory
+    tm = TranslationMemory()
+    matches = tm.lookup(text, lang)
+    return {"matches": matches}
 
 
 @app.get("/api/glossary")
