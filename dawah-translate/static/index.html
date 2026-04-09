@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dawah-Translate</title>
+    <title>Dawah-Translate V3</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
@@ -81,8 +81,8 @@
             cursor: not-allowed;
         }
 
-        /* Status */
-        .status-box {
+        /* Progress Box */
+        .progress-box {
             display: none;
             background: #1e293b;
             border: 1px solid #334155;
@@ -90,21 +90,38 @@
             padding: 1.5rem;
             margin-bottom: 2rem;
         }
-        .status-box.visible { display: block; }
-        .status-box .job-id {
+        .progress-box.visible { display: block; }
+        .progress-box .job-id {
             font-family: monospace;
             color: #3b82f6;
             font-size: 1.1rem;
         }
-        .status-box .progress {
-            margin-top: 0.5rem;
+        .progress-box .step-label {
+            margin-top: 0.75rem;
             color: #94a3b8;
+            font-size: 0.9rem;
         }
-        .status-box a {
+        .progress-bar-track {
+            margin-top: 0.5rem;
+            background: #0f172a;
+            border-radius: 6px;
+            height: 8px;
+            overflow: hidden;
+        }
+        .progress-bar-fill {
+            height: 100%;
+            background: #3b82f6;
+            border-radius: 6px;
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+        .progress-bar-fill.complete { background: #22c55e; }
+        .progress-bar-fill.error { background: #ef4444; }
+        .progress-box a {
             color: #3b82f6;
             text-decoration: none;
         }
-        .status-box a:hover { text-decoration: underline; }
+        .progress-box a:hover { text-decoration: underline; }
 
         /* Job list */
         .job-list h2 {
@@ -143,7 +160,15 @@
             font-weight: 600;
             white-space: nowrap;
         }
-        .badge.queued, .badge.downloading, .badge.transcribing, .badge.translating {
+        .badge.awaiting_config {
+            background: #713f12;
+            color: #fbbf24;
+        }
+        .badge.queued, .badge.downloading, .badge.transcribing, .badge.translating, .badge.retrying {
+            background: #1e3a5f;
+            color: #60a5fa;
+        }
+        .badge.validating {
             background: #1e3a5f;
             color: #60a5fa;
         }
@@ -172,15 +197,25 @@
 </head>
 <body>
     <nav style="background:#1e293b;border-bottom:1px solid #334155;padding:0.75rem 2rem;display:flex;align-items:center;gap:2rem;">
-        <span style="font-weight:700;font-size:1.1rem;color:#f8fafc;margin-right:auto;">Dawah-Translate</span>
+        <span style="font-weight:700;font-size:1.1rem;color:#f8fafc;margin-right:auto;">Dawah-Translate <span style="font-size:0.7rem;background:#3b82f6;color:#fff;padding:0.15rem 0.4rem;border-radius:4px;vertical-align:middle;margin-left:0.3rem;">V3</span></span>
         <a href="/" style="color:#3b82f6;text-decoration:none;font-size:0.9rem;">Home</a>
         <a href="/about" style="color:#94a3b8;text-decoration:none;font-size:0.9rem;">About</a>
         <a href="/architecture" style="color:#94a3b8;text-decoration:none;font-size:0.9rem;">Architecture</a>
         <a href="/glossary" style="color:#94a3b8;text-decoration:none;font-size:0.9rem;">Glossary</a>
     </nav>
     <div class="container">
-        <h1>Dawah-Translate</h1>
+        <h1>Dawah-Translate V3</h1>
         <p class="subtitle">YouTube video translation pipeline for Romanian dawah content</p>
+        <div style="background:#1e293b;border:1px solid #334155;border-radius:8px;padding:0.75rem 1rem;margin-bottom:1.5rem;font-size:0.8rem;color:#94a3b8;line-height:1.6;">
+            <strong style="color:#3b82f6;">What's new in V3:</strong>
+            4-stage translation pipeline (analysis, translation, quality review, validation) &middot;
+            Cost estimation &amp; model selection screen &middot;
+            Black bar subtitle mode (default) &middot;
+            Editable timestamps with keyboard shortcuts &middot;
+            Per-segment feedback &amp; re-translate &middot;
+            Transcription error detection &amp; highlighting &middot;
+            Editable Romanian title for export
+        </div>
 
         <!-- Submit Form -->
         <div class="card">
@@ -206,35 +241,20 @@
                         </select>
                         <p class="hint">Large-v3 is ~3x slower but more accurate for Arabic</p>
                     </div>
-                    <div class="form-group">
-                        <label for="translation_engine">Translation Engine</label>
-                        <select id="translation_engine" onchange="toggleClaudeModel()">
-                            <option value="local_quality" selected>Local Quality / NLLB + Ollama (free, recommended)</option>
-                            <option value="local_fast">Local Fast / NLLB only (free, lower quality)</option>
-                            <option value="cloud">Cloud / Claude API (paid, best quality)</option>
-                        </select>
-                        <p class="hint" id="engineHint">NLLB draft + local LLM refinement. Requires Ollama running.</p>
-                        <div id="ollamaWarning" style="display:none; margin-top:0.4rem; padding:0.5rem; background:#450a0a; border-radius:6px; font-size:0.8rem; color:#f87171;">
-                            Ollama is not running. Start it with: <code>ollama serve</code> &mdash; or switch to "Local Fast".
-                        </div>
-                    </div>
-                    <div class="form-group" id="claudeModelGroup" style="display: none;">
-                        <label for="claude_model">Claude Model</label>
-                        <select id="claude_model">
-                            <option value="sonnet" selected>Sonnet (standard)</option>
-                            <option value="opus">Opus (difficult content)</option>
-                        </select>
-                    </div>
                 </div>
+                <p class="hint" style="margin-bottom:1rem;">After transcription you'll pick the translation model and subtitle mode.</p>
                 <button type="submit" id="submitBtn">Start Translation</button>
             </form>
         </div>
 
-        <!-- Status Box -->
-        <div class="status-box" id="statusBox">
-            <div>Job ID: <span class="job-id" id="statusJobId"></span></div>
-            <div class="progress" id="statusProgress">Submitting...</div>
-            <div id="statusLink" style="margin-top: 0.75rem; display: none;">
+        <!-- Progress Box (SSE-driven) -->
+        <div class="progress-box" id="progressBox">
+            <div>Job ID: <span class="job-id" id="progressJobId"></span></div>
+            <div class="step-label" id="progressLabel">Submitting...</div>
+            <div class="progress-bar-track">
+                <div class="progress-bar-fill" id="progressBarFill"></div>
+            </div>
+            <div id="progressLink" style="margin-top: 0.75rem; display: none;">
                 <a id="reviewLink" href="#">Open Review Page</a>
             </div>
         </div>
@@ -251,38 +271,15 @@
     <script>
         const form = document.getElementById('submitForm');
         const submitBtn = document.getElementById('submitBtn');
-        const statusBox = document.getElementById('statusBox');
-        const statusJobId = document.getElementById('statusJobId');
-        const statusProgress = document.getElementById('statusProgress');
-        const statusLink = document.getElementById('statusLink');
+        const progressBox = document.getElementById('progressBox');
+        const progressJobId = document.getElementById('progressJobId');
+        const progressLabel = document.getElementById('progressLabel');
+        const progressBarFill = document.getElementById('progressBarFill');
+        const progressLink = document.getElementById('progressLink');
         const reviewLink = document.getElementById('reviewLink');
         const jobList = document.getElementById('jobList');
 
-        function toggleClaudeModel() {
-            const engine = document.getElementById('translation_engine').value;
-            document.getElementById('claudeModelGroup').style.display = engine === 'cloud' ? '' : 'none';
-            const hints = {
-                'local_fast': 'NLLB-200 only. Fast (~20s) but lower quality. No extra requirements.',
-                'local_quality': 'NLLB draft + local LLM refinement. Requires Ollama running.',
-                'cloud': 'Claude API. Best quality but costs ~$0.50-3 per video. Requires API key.',
-            };
-            document.getElementById('engineHint').textContent = hints[engine] || '';
-            if (engine === 'local_quality') checkOllama();
-            else document.getElementById('ollamaWarning').style.display = 'none';
-        }
-
-        async function checkOllama() {
-            try {
-                const res = await fetch('/api/ollama/status');
-                const data = await res.json();
-                document.getElementById('ollamaWarning').style.display = data.running ? 'none' : 'block';
-            } catch (e) {
-                document.getElementById('ollamaWarning').style.display = 'block';
-            }
-        }
-
-        // Check Ollama on load since local_quality is default
-        checkOllama();
+        let eventSource = null;
 
         // Submit form
         form.addEventListener('submit', async (e) => {
@@ -294,8 +291,6 @@
                 url: document.getElementById('url').value.trim(),
                 source_language: document.getElementById('source_language').value,
                 whisper_model: document.getElementById('whisper_model').value,
-                translation_engine: document.getElementById('translation_engine').value,
-                claude_model: document.getElementById('claude_model').value,
             };
 
             try {
@@ -307,10 +302,13 @@
                 const result = await res.json();
 
                 if (result.job_id) {
-                    statusBox.classList.add('visible');
-                    statusJobId.textContent = result.job_id;
-                    statusProgress.textContent = 'Job queued...';
-                    pollStatus(result.job_id);
+                    progressBox.classList.add('visible');
+                    progressJobId.textContent = result.job_id;
+                    progressLabel.textContent = 'Job queued...';
+                    progressBarFill.style.width = '0%';
+                    progressBarFill.className = 'progress-bar-fill';
+                    progressLink.style.display = 'none';
+                    connectSSE(result.job_id);
                 } else {
                     alert('Error: ' + JSON.stringify(result));
                 }
@@ -322,7 +320,46 @@
             }
         });
 
-        // Poll job status
+        // SSE progress connection
+        function connectSSE(jobId) {
+            if (eventSource) eventSource.close();
+
+            eventSource = new EventSource(`/api/jobs/${jobId}/progress`);
+
+            eventSource.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                progressLabel.textContent = data.message || data.step;
+                progressBarFill.style.width = data.progress + '%';
+
+                if (data.status === 'awaiting_config' || data.step === 'config') {
+                    eventSource.close();
+                    window.location.href = `/config/${jobId}`;
+                    return;
+                }
+
+                if (data.status === 'ready_for_review' || data.status === 'complete') {
+                    progressBarFill.className = 'progress-bar-fill complete';
+                    progressLink.style.display = 'block';
+                    reviewLink.href = `/review/${jobId}`;
+                    reviewLink.textContent = 'Open Review Page';
+                    eventSource.close();
+                    loadJobs();
+                } else if (data.status === 'error') {
+                    progressBarFill.className = 'progress-bar-fill error';
+                    progressBarFill.style.width = '100%';
+                    eventSource.close();
+                    loadJobs();
+                }
+            };
+
+            eventSource.onerror = () => {
+                // SSE disconnected — fall back to polling
+                eventSource.close();
+                pollStatus(jobId);
+            };
+        }
+
+        // Fallback polling (if SSE fails)
         let pollTimer = null;
         function pollStatus(jobId) {
             if (pollTimer) clearInterval(pollTimer);
@@ -330,16 +367,25 @@
                 try {
                     const res = await fetch(`/api/status/${jobId}`);
                     const info = await res.json();
-                    statusProgress.textContent = info.progress || info.status;
+                    progressLabel.textContent = info.progress || info.status;
+
+                    if (info.status === 'awaiting_config') {
+                        clearInterval(pollTimer);
+                        window.location.href = `/config/${jobId}`;
+                        return;
+                    }
 
                     if (info.status === 'ready_for_review' || info.status === 'complete') {
-                        statusLink.style.display = 'block';
+                        progressBarFill.className = 'progress-bar-fill complete';
+                        progressBarFill.style.width = '100%';
+                        progressLink.style.display = 'block';
                         reviewLink.href = `/review/${jobId}`;
-                        reviewLink.textContent = 'Open Review Page';
                         clearInterval(pollTimer);
                         loadJobs();
                     } else if (info.status === 'error') {
-                        statusProgress.textContent = 'Error: ' + (info.error || 'Unknown error');
+                        progressBarFill.className = 'progress-bar-fill error';
+                        progressBarFill.style.width = '100%';
+                        progressLabel.textContent = 'Error: ' + (info.error || 'Unknown error');
                         clearInterval(pollTimer);
                         loadJobs();
                     }
@@ -393,10 +439,13 @@
                 const res = await fetch(`/api/retry/${jobId}`, { method: 'POST' });
                 const result = await res.json();
                 if (result.status === 'retrying') {
-                    statusBox.classList.add('visible');
-                    statusJobId.textContent = jobId;
-                    statusProgress.textContent = 'Retrying...';
-                    pollStatus(jobId);
+                    progressBox.classList.add('visible');
+                    progressJobId.textContent = jobId;
+                    progressLabel.textContent = 'Retrying...';
+                    progressBarFill.style.width = '0%';
+                    progressBarFill.className = 'progress-bar-fill';
+                    progressLink.style.display = 'none';
+                    connectSSE(jobId);
                     loadJobs();
                 } else {
                     alert('Retry failed: ' + JSON.stringify(result));

@@ -11,8 +11,8 @@ NOTE: First run downloads the Whisper model (~3 GB for large-v3, ~1.5 GB for med
 """
 
 import sys
-import os
 import json
+import logging
 import time
 import argparse
 from pathlib import Path
@@ -20,6 +20,8 @@ from pathlib import Path
 # Allow running as standalone script
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from config import JOBS_DIR, DEFAULT_WHISPER_MODEL, WHISPER_CPU_THREADS
+
+logger = logging.getLogger("dawah.transcribe")
 
 
 def format_timestamp(seconds: float) -> str:
@@ -29,6 +31,13 @@ def format_timestamp(seconds: float) -> str:
     secs = int(seconds % 60)
     millis = int((seconds % 1) * 1000)
     return f"{hours:02d}:{minutes:02d}:{secs:02d},{millis:03d}"
+
+
+def _format_duration(seconds: float) -> str:
+    """Format seconds as M:SS for display."""
+    m = int(seconds // 60)
+    s = int(seconds % 60)
+    return f"{m}:{s:02d}"
 
 
 def write_srt(segments: list, output_path: Path) -> None:
@@ -63,7 +72,8 @@ def update_job_status(job_id: str, status: str, **extra):
         json.dump(info, f, indent=2, ensure_ascii=False)
 
 
-def run_transcription(job_id: str, model_size: str = None, language: str = None) -> str:
+def run_transcription(job_id: str, model_size: str = None, language: str = None,
+                      progress_cb=None) -> str:
     """
     Transcribe audio for the given job.
 
@@ -71,6 +81,7 @@ def run_transcription(job_id: str, model_size: str = None, language: str = None)
         job_id: The job identifier
         model_size: Whisper model ("large-v3" or "medium")
         language: Source language ("ar", "en", or None for auto-detect)
+        progress_cb: Optional callback(step, progress_pct, message) for SSE progress
 
     Returns:
         Path to the output SRT file.
@@ -90,19 +101,16 @@ def run_transcription(job_id: str, model_size: str = None, language: str = None)
     duration = job_info.get("video_duration", 0)
     duration_min = duration / 60 if duration else 0
 
-    print(f"Job: {job_id}")
-    print(f"Audio: {audio_path}")
-    print(f"Duration: {duration_min:.1f} minutes")
-    print(f"Model: {model_size}")
-    print(f"Language: {language or 'auto-detect'}")
-    print()
+    logger.info("Job: %s | Audio: %s | Duration: %.1f min | Model: %s | Language: %s",
+                job_id, audio_path, duration_min, model_size, language or "auto")
 
     # Update job status
     update_job_status(job_id, "transcribing", whisper_model=model_size)
 
     # Load faster-whisper model
-    print(f"Loading Whisper model '{model_size}' (CPU, int8)...")
-    print("  (First run downloads the model — this may take a few minutes)")
+    if progress_cb:
+        progress_cb("transcribe", 0, "Loading Whisper model...")
+    logger.info("Loading Whisper model '%s' (CPU, int8)...", model_size)
     load_start = time.time()
 
     from faster_whisper import WhisperModel
@@ -115,11 +123,12 @@ def run_transcription(job_id: str, model_size: str = None, language: str = None)
     )
 
     load_time = time.time() - load_start
-    print(f"  Model loaded in {load_time:.1f}s")
-    print()
+    logger.info("Model loaded in %.1fs", load_time)
+
+    if progress_cb:
+        progress_cb("transcribe", 5, f"Whisper model loaded in {load_time:.0f}s. Transcribing...")
 
     # Run transcription
-    print("Transcribing...")
     trans_start = time.time()
 
     # Language parameter: None means auto-detect
@@ -135,10 +144,11 @@ def run_transcription(job_id: str, model_size: str = None, language: str = None)
 
     detected_lang = info.language
     lang_prob = info.language_probability
-    print(f"  Detected language: {detected_lang} (confidence: {lang_prob:.1%})")
+    logger.info("Detected language: %s (confidence: %.1f%%)", detected_lang, lang_prob * 100)
 
     # Collect segments with progress reporting
     segments = []
+    last_progress_time = 0  # throttle progress updates to max 1 per second
     for seg in segments_iter:
         segments.append({
             "start": seg.start,
@@ -146,27 +156,26 @@ def run_transcription(job_id: str, model_size: str = None, language: str = None)
             "text": seg.text,
         })
 
-        # Print progress
-        if duration > 0:
-            progress = min(seg.end / duration * 100, 100)
-            elapsed = time.time() - trans_start
-            if seg.end > 0:
-                est_total = elapsed / (seg.end / duration) if seg.end < duration else elapsed
-                est_remaining = max(est_total - elapsed, 0)
-                print(
-                    f"\r  Progress: {progress:.1f}% | "
-                    f"Elapsed: {elapsed:.0f}s | "
-                    f"Remaining: ~{est_remaining:.0f}s | "
-                    f"Segments: {len(segments)}",
-                    end="", flush=True,
-                )
+        # Report progress via callback (throttled)
+        now = time.time()
+        if duration > 0 and (now - last_progress_time) >= 1.0:
+            last_progress_time = now
+            pct = min(seg.end / duration, 1.0)
+            progress_int = 5 + int(pct * 90)  # 5-95% range
+            elapsed_str = _format_duration(seg.end)
+            total_str = _format_duration(duration)
+            msg = f"Transcribing... {elapsed_str} / {total_str}"
+
+            if progress_cb:
+                progress_cb("transcribe", progress_int, msg)
 
     trans_time = time.time() - trans_start
-    print(f"\n  Transcription complete in {trans_time:.1f}s ({len(segments)} segments)")
-    print()
+    logger.info("Transcription complete in %.1fs (%d segments)", trans_time, len(segments))
+
+    if progress_cb:
+        progress_cb("transcribe", 98, f"Writing SRT ({len(segments)} segments)...")
 
     # Write SRT file
-    print(f"Writing SRT to {srt_path} ...")
     write_srt(segments, srt_path)
 
     # Update job info
@@ -179,12 +188,18 @@ def run_transcription(job_id: str, model_size: str = None, language: str = None)
         srt_original_path=str(srt_path),
     )
 
-    print(f"Done! {len(segments)} segments written.")
+    if progress_cb:
+        progress_cb("transcribe", 100, f"Transcription complete! {len(segments)} segments in {trans_time:.0f}s")
+
+    logger.info("Done! %d segments written to %s", len(segments), srt_path)
     return str(srt_path)
 
 
-# ── Standalone entry point ────────────────────────────────────────────
+# ── Standalone entry point ───────────────────────────────────────────
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO,
+                        format="[Transcribe] %(message)s")
+
     parser = argparse.ArgumentParser(description="Transcribe audio with faster-whisper")
     parser.add_argument("job_id", help="Job ID to transcribe")
     parser.add_argument("--model", default=None, choices=["large-v3", "medium"],
@@ -194,11 +209,15 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     print("=" * 60)
-    print("DAWAH-TRANSLATE — Audio Transcription")
+    print("DAWAH-TRANSLATE -- Audio Transcription")
     print("=" * 60)
 
+    def _cli_progress(step, pct, msg):
+        print(f"  [{step}] {pct}% | {msg}")
+
     try:
-        srt_path = run_transcription(args.job_id, args.model, args.language)
+        srt_path = run_transcription(args.job_id, args.model, args.language,
+                                     progress_cb=_cli_progress)
         print()
         print(f"Next step: python pipeline/translate.py {args.job_id}")
     except Exception as e:

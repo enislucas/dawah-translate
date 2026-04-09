@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Configure Translation — Dawah-Translate V3</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background: #0f172a;
+            color: #e2e8f0;
+            min-height: 100vh;
+        }
+        .container { max-width: 800px; margin: 0 auto; padding: 2rem; }
+        h1 { font-size: 1.8rem; margin-bottom: 0.5rem; color: #f8fafc; }
+        h2 { font-size: 1.1rem; margin-bottom: 1rem; color: #cbd5e1; }
+        .subtitle { color: #94a3b8; margin-bottom: 2rem; font-size: 0.95rem; }
+
+        .card {
+            background: #1e293b;
+            border-radius: 12px;
+            padding: 1.75rem;
+            margin-bottom: 1.5rem;
+            border: 1px solid #334155;
+        }
+
+        .video-info dl {
+            display: grid;
+            grid-template-columns: 9rem 1fr;
+            row-gap: 0.5rem;
+            font-size: 0.9rem;
+        }
+        .video-info dt { color: #64748b; }
+        .video-info dd { color: #f1f5f9; }
+
+        .mode-options { display: grid; gap: 0.75rem; }
+        .mode-option {
+            display: flex;
+            gap: 0.75rem;
+            padding: 1rem;
+            background: #0f172a;
+            border: 2px solid #334155;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: border-color 0.15s, background 0.15s;
+        }
+        .mode-option:hover { border-color: #475569; }
+        .mode-option.selected {
+            border-color: #3b82f6;
+            background: #1e293b;
+        }
+        .mode-option input[type="radio"] { margin-top: 0.25rem; accent-color: #3b82f6; }
+        .mode-option .mode-label { font-weight: 600; color: #f1f5f9; margin-bottom: 0.25rem; }
+        .mode-option .mode-desc { font-size: 0.85rem; color: #94a3b8; }
+        .mode-option .recommended {
+            display: inline-block;
+            margin-left: 0.5rem;
+            font-size: 0.7rem;
+            background: #1e3a5f;
+            color: #93c5fd;
+            padding: 0.1rem 0.5rem;
+            border-radius: 999px;
+            font-weight: 600;
+        }
+
+        .model-options { display: grid; gap: 0.75rem; }
+        .model-option {
+            display: grid;
+            grid-template-columns: auto 1fr auto;
+            align-items: center;
+            gap: 1rem;
+            padding: 1rem 1.25rem;
+            background: #0f172a;
+            border: 2px solid #334155;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: border-color 0.15s;
+        }
+        .model-option:hover { border-color: #475569; }
+        .model-option.selected { border-color: #3b82f6; background: #1e293b; }
+        .model-option input[type="radio"] { accent-color: #3b82f6; }
+        .model-option .model-name { font-weight: 600; color: #f1f5f9; }
+        .model-option .model-desc { font-size: 0.8rem; color: #94a3b8; }
+        .model-option .price-range {
+            font-family: monospace;
+            font-weight: 600;
+            color: #93c5fd;
+            font-size: 1rem;
+            text-align: right;
+            white-space: nowrap;
+        }
+        .model-option .price-mid {
+            display: block;
+            font-size: 0.7rem;
+            color: #64748b;
+            font-weight: normal;
+        }
+
+        button.primary {
+            padding: 0.9rem 2rem;
+            background: #3b82f6;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            width: 100%;
+            transition: background 0.15s;
+        }
+        button.primary:hover { background: #2563eb; }
+        button.primary:disabled { background: #475569; cursor: not-allowed; }
+
+        .nav-back {
+            color: #64748b;
+            text-decoration: none;
+            font-size: 0.85rem;
+            margin-bottom: 1rem;
+            display: inline-block;
+        }
+        .nav-back:hover { color: #93c5fd; }
+
+        .loading { color: #64748b; font-size: 0.9rem; padding: 1rem 0; }
+        .error { color: #f87171; font-size: 0.9rem; padding: 1rem 0; }
+
+        .footnote { font-size: 0.75rem; color: #475569; margin-top: 0.5rem; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <a class="nav-back" href="/">← Back to home</a>
+        <h1>Configure Translation</h1>
+        <p class="subtitle">Transcription is done. Pick how you want to translate.</p>
+
+        <!-- Video info -->
+        <div class="card video-info">
+            <h2>Video</h2>
+            <dl id="videoInfo">
+                <dt>Loading...</dt><dd></dd>
+            </dl>
+        </div>
+
+        <!-- Subtitle mode -->
+        <div class="card">
+            <h2>Subtitle position</h2>
+            <div class="mode-options">
+                <label class="mode-option selected" data-mode="black_bar">
+                    <input type="radio" name="subtitle_mode" value="black_bar" checked>
+                    <div>
+                        <div class="mode-label">
+                            Black bar below video
+                            <span class="recommended">RECOMMENDED</span>
+                        </div>
+                        <div class="mode-desc">Adds a clean black strip beneath the video. Romanian subtitles never overlap existing English/Arabic subtitles.</div>
+                    </div>
+                </label>
+                <label class="mode-option" data-mode="overlay">
+                    <input type="radio" name="subtitle_mode" value="overlay">
+                    <div>
+                        <div class="mode-label">Overlay on video</div>
+                        <div class="mode-desc">Burn subtitles directly on top of the video. Use only if the video has no existing subtitles.</div>
+                    </div>
+                </label>
+            </div>
+        </div>
+
+        <!-- Model + cost -->
+        <div class="card">
+            <h2>Translation model</h2>
+            <div id="modelOptions" class="model-options">
+                <div class="loading">Calculating cost estimate...</div>
+            </div>
+            <p class="footnote">Estimates are ±30% — actual cost depends on segment length and dialect density.</p>
+        </div>
+
+        <button class="primary" id="startBtn" disabled>Start translation</button>
+    </div>
+
+    <script>
+        const pathParts = window.location.pathname.split('/').filter(Boolean);
+        const jobId = pathParts[pathParts.length - 1];
+
+        const videoInfo = document.getElementById('videoInfo');
+        const modelOptions = document.getElementById('modelOptions');
+        const startBtn = document.getElementById('startBtn');
+
+        let selectedModel = 'sonnet';
+        let selectedMode = 'black_bar';
+        let estimateData = null;
+
+        function fmtDuration(seconds) {
+            if (!seconds) return '—';
+            const m = Math.floor(seconds / 60);
+            const s = Math.floor(seconds % 60);
+            return `${m}:${s.toString().padStart(2, '0')}`;
+        }
+
+        function fmtConfidence(c) {
+            if (c == null) return '—';
+            return `${(c * 100).toFixed(0)}%`;
+        }
+
+        function escapeHtml(s) {
+            return String(s == null ? '' : s)
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        }
+
+        async function loadEstimate() {
+            try {
+                const res = await fetch(`/api/job/${jobId}/estimate`);
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({}));
+                    throw new Error(err.error || `HTTP ${res.status}`);
+                }
+                estimateData = await res.json();
+                renderVideoInfo();
+                renderModels();
+                startBtn.disabled = false;
+            } catch (e) {
+                modelOptions.innerHTML = `<div class="error">Failed to load estimate: ${escapeHtml(e.message)}</div>`;
+            }
+        }
+
+        function renderVideoInfo() {
+            const d = estimateData;
+            videoInfo.innerHTML = `
+                <dt>Title</dt><dd>${escapeHtml(d.video_title || 'Unknown')}</dd>
+                <dt>Duration</dt><dd>${fmtDuration(d.video_duration)}</dd>
+                <dt>Language</dt><dd>${escapeHtml(d.detected_language || '?')} (${fmtConfidence(d.language_confidence)})</dd>
+                <dt>Segments</dt><dd>${d.segment_count}</dd>
+            `;
+        }
+
+        function renderModels() {
+            const models = estimateData.models;
+            const aliasOrder = ['sonnet', 'opus'];
+            const labels = {
+                sonnet: { name: 'Claude Sonnet', desc: 'Recommended — fast, accurate for most lectures' },
+                opus: { name: 'Claude Opus', desc: 'Highest quality — for difficult content or long lectures' },
+            };
+
+            modelOptions.innerHTML = aliasOrder.map(alias => {
+                const m = models[alias];
+                if (!m) return '';
+                const label = labels[alias] || { name: alias, desc: '' };
+                const checked = alias === selectedModel ? 'checked' : '';
+                const sel = alias === selectedModel ? 'selected' : '';
+                const range = `€${m.low_eur.toFixed(3)} – €${m.high_eur.toFixed(3)}`;
+                return `
+                    <label class="model-option ${sel}" data-model="${alias}">
+                        <input type="radio" name="claude_model" value="${alias}" ${checked}>
+                        <div>
+                            <div class="model-name">${label.name}</div>
+                            <div class="model-desc">${label.desc}</div>
+                        </div>
+                        <div class="price-range">
+                            ${range}
+                            <span class="price-mid">≈ €${m.mid_eur.toFixed(3)}</span>
+                        </div>
+                    </label>
+                `;
+            }).join('');
+
+            // Wire selection
+            modelOptions.querySelectorAll('.model-option').forEach(el => {
+                el.addEventListener('click', () => {
+                    selectedModel = el.dataset.model;
+                    modelOptions.querySelectorAll('.model-option').forEach(o => o.classList.remove('selected'));
+                    el.classList.add('selected');
+                    el.querySelector('input[type=radio]').checked = true;
+                });
+            });
+        }
+
+        // Wire subtitle mode selection
+        document.querySelectorAll('.mode-option').forEach(el => {
+            el.addEventListener('click', () => {
+                selectedMode = el.dataset.mode;
+                document.querySelectorAll('.mode-option').forEach(o => o.classList.remove('selected'));
+                el.classList.add('selected');
+                el.querySelector('input[type=radio]').checked = true;
+            });
+        });
+
+        // Submit
+        startBtn.addEventListener('click', async () => {
+            startBtn.disabled = true;
+            startBtn.textContent = 'Starting...';
+            try {
+                const res = await fetch(`/api/job/${jobId}/start-translation`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        claude_model: selectedModel,
+                        subtitle_mode: selectedMode,
+                    }),
+                });
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({}));
+                    throw new Error(err.error || `HTTP ${res.status}`);
+                }
+                // Go back to home and show progress
+                window.location.href = `/?resume=${jobId}`;
+            } catch (e) {
+                startBtn.disabled = false;
+                startBtn.textContent = 'Start translation';
+                alert(`Failed to start: ${e.message}`);
+            }
+        });
+
+        loadEstimate();
+    </script>
+</body>
+</html>

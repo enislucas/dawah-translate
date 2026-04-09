@@ -1,17 +1,25 @@
 """
-Translate subtitles to Romanian using Claude API with Islamic terminology glossary.
+Translate subtitles to Romanian using Claude API — Two-Layer Architecture (V3).
+
+Four-step pipeline:
+    Step 1: Summary pass — analyze full SRT, build glossary, flag errors, translate title
+    Step 2: Sliding-window translation — 50-segment windows, focus on accuracy
+    Step 3: Quality review pass — full polish and error correction
+    Step 4: Consistency pass — (optional, for long videos) check term consistency
 
 Usage:
-    python pipeline/translate.py <job_id> [--claude-model sonnet]
+    python pipeline/translate.py <job_id> [--model sonnet]
 
 Reads transcript_original.srt and produces transcript_romanian.srt.
 """
 
 import sys
 import json
+import logging
+import math
+import re
 import time
 import argparse
-import re
 from pathlib import Path
 
 # Allow running as standalone script
@@ -19,27 +27,34 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from config import (
     JOBS_DIR, GLOSSARY_PATH, ANTHROPIC_API_KEY,
     CLAUDE_MODELS, DEFAULT_CLAUDE_MODEL,
-    TRANSLATION_BATCH_SIZE, TRANSLATION_CONTEXT_SIZE,
-    TRANSLATION_MAX_RETRIES, MAX_CHARS_PER_LINE, MAX_LINES_PER_BLOCK,
+    TRANSLATION_MAX_RETRIES,
+    WINDOW_SIZE, WINDOW_OVERLAP,
+    REVIEW_WINDOW_SIZE, REVIEW_WINDOW_OVERLAP,
     MAX_READING_SPEED,
 )
 from pipeline.subtitle import (
     parse_srt, write_srt, normalize_romanian,
-    check_reading_speed, compute_max_chars, resegment,
+    check_reading_speed, resegment,
 )
+
+logger = logging.getLogger("dawah.translate")
+
+# ── Progress callback type ───────────────────────────────────────────
+# progress_callback(step, progress_pct, message)
+# Called by run_translation so the server can push SSE events.
 
 
 def load_glossary() -> dict:
     """Load the Islamic terminology glossary from glossary.json."""
     if not GLOSSARY_PATH.exists():
-        print("  Warning: glossary.json not found, proceeding without glossary")
+        logger.warning("glossary.json not found, proceeding without glossary")
         return {}
     with open(GLOSSARY_PATH, "r", encoding="utf-8") as f:
         return json.load(f)
 
 
 def format_glossary_for_prompt(glossary: dict) -> str:
-    """Format glossary as a readable block for the Claude system prompt."""
+    """Format glossary as a readable block for Claude prompts."""
     if not glossary:
         return "(No glossary provided)"
     lines = []
@@ -47,7 +62,7 @@ def format_glossary_for_prompt(glossary: dict) -> str:
         trans = info["transliteration"]
         expl = info.get("ro_explanation", "")
         rule = info.get("rule", "")
-        entry = f"  {arabic} → {trans}"
+        entry = f"  {arabic} -> {trans}"
         if expl:
             entry += f" ({expl})"
         if rule:
@@ -56,121 +71,539 @@ def format_glossary_for_prompt(glossary: dict) -> str:
     return "\n".join(lines)
 
 
-def build_system_prompt(source_language: str, glossary: dict,
-                        introduced_terms: set) -> str:
-    """Build the system prompt for Claude translation."""
-    glossary_text = format_glossary_for_prompt(glossary)
-    introduced_text = ", ".join(sorted(introduced_terms)) if introduced_terms else "(none yet)"
-
-    return f"""You are a professional subtitle translator specializing in Islamic educational content for a Romanian-speaking audience.
-
-TASK: Translate the following subtitle segments from {source_language} to Romanian.
-
-RULES:
-1. GLOSSARY: Use the provided glossary for Islamic terms. On first occurrence in this batch, include the Romanian explanation in parentheses. After first occurrence, use only the transliterated term. If a term was already introduced in a previous batch (marked with [INTRODUCED]), use only the transliterated term.
-2. CONCISENESS: Each subtitle segment has a maximum character count shown in [max_chars]. Your translation MUST fit within this limit. If the original is verbose, condense — a subtitle is not a transcript.
-3. NATURAL ROMANIAN: Use proper diacritics (ș, ț, ă, î, â) with comma-below, never cedilla. Write in natural, conversational Romanian — not formal/literary.
-4. DO NOT over-arabicize. Only use Arabic/transliterated terms from the glossary. All other words must be in plain Romanian.
-5. PRESERVE SEGMENT COUNT: Return exactly the same number of segments with the same index numbers.
-6. LINE BREAKS: If a segment exceeds 42 characters, split into two lines with \\n. Max 2 lines.
-
-GLOSSARY:
-{glossary_text}
-
-PREVIOUSLY INTRODUCED TERMS: {introduced_text}
-
-INPUT FORMAT (one segment per line):
-[index] [max_chars:n] | source_text
-
-OUTPUT FORMAT (one segment per line, nothing else):
-[index] | translated_text"""
-
-
-def build_batch_input(segments: list[dict], context_segments: list[dict] = None) -> str:
-    """Format a batch of segments for the Claude prompt."""
+def _format_srt_for_analysis(segments: list[dict]) -> str:
+    """Format all segments as numbered lines for the summary pass."""
     lines = []
-
-    # Add context from previous batch (not to be translated)
-    if context_segments:
-        lines.append("CONTEXT (do not translate, for reference only):")
-        for seg in context_segments:
-            lines.append(f"  [{seg['index']}] {seg['text']}")
-        lines.append("")
-        lines.append("TRANSLATE THE FOLLOWING:")
-
     for seg in segments:
-        max_chars = compute_max_chars(seg)
-        # Ensure minimum of 20 chars
-        max_chars = max(max_chars, 20)
-        lines.append(f"[{seg['index']}] [max_chars:{max_chars}] | {seg['text']}")
-
+        lines.append(f"[{seg['index']}] ({seg['start']:.1f}-{seg['end']:.1f}s) {seg['text']}")
     return "\n".join(lines)
 
 
-def parse_translation_response(response_text: str, expected_count: int) -> dict:
-    """
-    Parse Claude's response into a dict of {index: translated_text}.
+# ── Step 1: Summary Pass ─────────────────────────────────────────────
 
-    Expected format: [index] | translated_text
+def _build_step1_prompt(source_language: str, glossary: dict, video_title: str) -> str:
+    """System prompt for the full-document analysis pass."""
+    glossary_text = format_glossary_for_prompt(glossary)
+    return f"""You are a knowledgeable Muslim translator who understands Islamic theology (aqeedah), jurisprudence (fiqh), and the terminology of classical Islamic scholarship.
+
+You follow the creed and methodology of Ahl as-Sunnah wal-Jama'ah, in the tradition of scholars such as Ibn Taymiyyah, Ibn al-Qayyim, Ibn Katheer, Muhammad ibn Abdul-Wahhab, Sheikh Ibn Baz, Sheikh al-Uthaymeen, Sheikh al-Albani, Sheikh al-Fawzan, and Sheikh Abdur-Razzaq al-Badr.
+
+TASK: Analyze the following auto-transcribed subtitle file ({source_language}) and produce a structured analysis.
+
+## GLOSSARY (reference)
+{glossary_text}
+
+## OUTPUT FORMAT (respond in EXACTLY this JSON structure, nothing else):
+{{
+  "speaker": "Name or description of the primary speaker",
+  "topic": "Brief topic summary (1-2 sentences)",
+  "content_summary": "3-5 sentence summary of the full content",
+  "detected_terms": {{
+    "arabic_term": "recommended Romanian translation"
+  }},
+  "transcription_errors": [
+    {{
+      "segment_index": 0,
+      "issue": "description of the problem",
+      "likely_correct": "what the audio probably said"
+    }}
+  ],
+  "title_romanian": "Natural Romanian translation of the video title"
+}}
+
+## TITLE TRANSLATION
+The original video title is: "{video_title}"
+Translate into natural Romanian — should sound like a native Romanian speaker wrote it.
+Not a literal translation. Concise, clear, suitable as a video title.
+
+## TRANSCRIPTION ERROR DETECTION
+The source was auto-transcribed by Whisper. Be CONSERVATIVE — only flag segments that are truly unintelligible:
+- Non-Arabic words injected mid-sentence (English "refresh", city names like "Istanbul" that don't belong)
+- Random characters or completely nonsensical sequences
+- Clear code-switching artifacts
+Do NOT flag slightly corrupted but inferable Arabic. For example, "السم" is clearly "السنة", "بائل" is clearly "مباين" — these should be translated with best effort, not flagged.
+Only include genuinely broken segments in transcription_errors."""
+
+
+def run_step1_summary(client, model_id: str, segments: list[dict],
+                      source_language: str, glossary: dict, video_title: str,
+                      progress_cb=None) -> dict:
     """
+    Step 1: Send the full SRT for analysis.
+    Returns the parsed summary dict.
+    """
+    if progress_cb:
+        progress_cb("translate", 0, "Stage 1/4: Analyzing document...")
+
+    system_prompt = _build_step1_prompt(source_language, glossary, video_title)
+    user_message = _format_srt_for_analysis(segments)
+
+    logger.info("Step 1: Sending %d segments for analysis...", len(segments))
+
+    response = _call_claude(client, model_id, system_prompt, user_message, max_tokens=4096)
+
+    # Parse JSON response — Claude sometimes wraps in ```json blocks
+    text = response.strip()
+    if text.startswith("```"):
+        text = re.sub(r'^```(?:json)?\s*', '', text)
+        text = re.sub(r'\s*```$', '', text)
+
+    try:
+        summary = json.loads(text)
+    except json.JSONDecodeError:
+        logger.warning("Step 1: Could not parse JSON response, using defaults")
+        summary = {
+            "speaker": "Unknown",
+            "topic": "Islamic lecture",
+            "content_summary": "",
+            "detected_terms": {},
+            "transcription_errors": [],
+            "title_romanian": video_title,
+        }
+
+    logger.info("Step 1 complete: speaker=%s, flagged_errors=%d, terms=%d",
+                summary.get("speaker", "?"),
+                len(summary.get("transcription_errors", [])),
+                len(summary.get("detected_terms", {})))
+
+    if progress_cb:
+        n_errors = len(summary.get("transcription_errors", []))
+        n_terms = len(summary.get("detected_terms", {}))
+        progress_cb("translate", 5, f"Stage 1/4 done: {n_terms} terms, {n_errors} flagged errors")
+
+    return summary
+
+
+# ── Step 2: Sliding-Window Translation ───────────────────────────────
+
+def _build_step2_system_prompt(source_language: str, glossary: dict,
+                               summary: dict) -> str:
+    """Short, accuracy-focused system prompt for Stage 2 (raw translation)."""
+    glossary_text = format_glossary_for_prompt(glossary)
+
+    errors_text = "(none detected)"
+    errors = summary.get("transcription_errors", [])
+    if errors:
+        error_lines = []
+        for e in errors:
+            error_lines.append(f"  Segment {e['segment_index']}: {e['issue']} (likely: {e.get('likely_correct', '?')})")
+        errors_text = "\n".join(error_lines)
+
+    return f"""You are translating Islamic lecture subtitles from {source_language} into Romanian.
+
+You follow the methodology of Ahl as-Sunnah wal-Jamā'ah (Ibn Taymiyyah, Ibn Baz, al-Uthaymeen, al-Albani, al-Fawzan).
+
+DOCUMENT CONTEXT:
+Speaker: {summary.get('speaker', 'Unknown')}
+Topic: {summary.get('topic', 'Islamic lecture')}
+Summary: {summary.get('content_summary', '')}
+
+FLAGGED TRANSCRIPTION ERRORS (from analysis pass):
+{errors_text}
+
+RULES — your only job is ACCURACY:
+
+1. Translate EVERY segment. Never output [EROARE_TRANSCRIERE] or [NETRADUS] or a blank — only use the ~ prefix when you genuinely cannot decode the text, and always follow ~ with a real Romanian guess. Dialect Arabic (مش, ايش, بس, شوف, وش, ليش) is NORMAL — translate it.
+
+2. Get the meaning RIGHT. Use the surrounding context (previous translations + lookahead) to make sure your output makes sense in the flow.
+
+3. Glossary terms (use exactly):
+{glossary_text}
+   First occurrence of a glossary term: transliteration + Romanian explanation in parentheses. After that: transliteration only.
+
+4. WELL-KNOWN DU'AS AND QURAN: When the speaker quotes a known du'a, hadith, or Quran verse, translate the MEANING into Romanian. Do not transliterate Arabic du'as. Examples:
+   - "اللهم اجعلني خيرا مما يظنون واغفر لي ما لا يعلمون" → "O, Allah, fă-mă mai bun decât cred ei despre mine și iartă-mi ceea ce ei nu știu"
+   - "لا حول ولا قوة إلا بالله" → "Nu există putere și forță decât prin Allah"
+   - "الحمد لله" → "Alhamdulillah" (this one stays transliterated — fixed phrase)
+
+5. SINGULAR vs PLURAL: When the speaker talks about HIMSELF (Arabic أنا, ـي, my), use Romanian SINGULAR ("eu", "mă", "îmi", "meu"). When about a group (نحن, ـنا), use plural. Pay close attention — do not turn singular into plural.
+
+6. WHISPER GARBLES well-known phrases. Recognize them:
+   - "أحول الأقوى تسنى منه" / similar → almost certainly "لا حول ولا قوة إلا بالله"
+   - "يمكن أنتم أفقر مني" → likely "يمكن أنتم أعلم مني" ("perhaps you know more than me")
+   - "بسم الله الرحمن الرحيم" can come through as fragments — recognize and restore
+   Translate the INTENDED phrase, not the garbled surface text.
+
+7. NO CONTENT LOSS: every proper name, place, date, and number in the source must appear somewhere in the translation. If "يوم خيبر" is in the source, "Khaybar" must be in your output.
+
+OUTPUT FORMAT (one segment per line, nothing else):
+{{index}}|{{romanian translation}}
+
+Do not output explanations, headers, or commentary. Translate every active segment. Do not translate context or lookahead segments — those are for reference only."""
+
+
+
+def _build_step2_user_message(context_segments: list[dict],
+                              active_segments: list[dict],
+                              lookahead_segments: list[dict]) -> str:
+    """Build the user message for a translation window."""
+    parts = []
+
+    if context_segments:
+        parts.append("## CONTEXT (already translated -- DO NOT re-translate, just maintain consistency):")
+        for seg in context_segments:
+            parts.append(f"[{seg['index']}] {seg['text']}")
+        parts.append("")
+
+    parts.append("## TRANSLATE THESE SEGMENTS:")
+    for seg in active_segments:
+        parts.append(f"[{seg['index']}] {seg['text']}")
+    parts.append("")
+
+    if lookahead_segments:
+        parts.append("## LOOKAHEAD (upcoming source text -- read for context, DO NOT translate):")
+        for seg in lookahead_segments:
+            parts.append(f"[{seg['index']}] {seg['text']}")
+
+    return "\n".join(parts)
+
+
+def _parse_window_response(response_text: str) -> dict:
+    """Parse windowed translation response into {index: translated_text}."""
     translations = {}
     for line in response_text.strip().split('\n'):
         line = line.strip()
         if not line:
             continue
-        match = re.match(r'\[(\d+)\]\s*\|\s*(.+)', line)
+        match = re.match(r'(\d+)\s*\|\s*(.+)', line)
         if match:
             idx = int(match.group(1))
             text = match.group(2).strip()
             translations[idx] = text
-
     return translations
 
 
-def translate_batch(client, model_id: str, system_prompt: str,
-                    segments: list[dict], context_segments: list[dict] = None,
-                    max_retries: int = TRANSLATION_MAX_RETRIES) -> dict:
+def run_step2_translation(client, model_id: str, segments: list[dict],
+                          source_language: str, glossary: dict, summary: dict,
+                          progress_cb=None) -> list[dict]:
     """
-    Send a batch of segments to Claude for translation.
-
-    Returns dict of {index: translated_text}.
-    Retries on failure with exponential backoff.
+    Step 2: Translate in sliding windows (Layer 1 — accuracy focus).
+    Returns list of translated segment dicts.
     """
-    user_message = build_batch_input(segments, context_segments)
+    system_prompt = _build_step2_system_prompt(source_language, glossary, summary)
 
+    window_size = WINDOW_SIZE
+    overlap = WINDOW_OVERLAP
+    num_windows = max(1, math.ceil(len(segments) / window_size))
+
+    logger.info("Step 2: Translating %d segments in %d windows (size=%d, overlap=%d)",
+                len(segments), num_windows, window_size, overlap)
+
+    # Build translated segments list — start as copies of original
+    translated = [{**seg} for seg in segments]
+    # Track which terms have been introduced (for glossary first-occurrence logic)
+    introduced_terms = set()
+
+    for win_idx in range(num_windows):
+        start = win_idx * window_size
+        end = min(start + window_size, len(segments))
+        active = segments[start:end]
+
+        # Context: already-translated segments before the window
+        ctx_start = max(0, start - overlap)
+        context = translated[ctx_start:start] if start > 0 else []
+
+        # Lookahead: original segments after the window
+        look_end = min(end + overlap, len(segments))
+        lookahead = segments[end:look_end] if end < len(segments) else []
+
+        # Progress: Stage 2 occupies 5-60% range
+        pct = int(5 + (win_idx / num_windows) * 55)
+        msg = f"Stage 2/4: Translating window {win_idx + 1}/{num_windows} (segments {start + 1}-{end})..."
+        logger.info(msg)
+        if progress_cb:
+            progress_cb("translate", pct, msg)
+
+        user_message = _build_step2_user_message(context, active, lookahead)
+
+        response_text = _call_claude(client, model_id, system_prompt, user_message,
+                                     max_tokens=8192)
+        window_translations = _parse_window_response(response_text)
+
+        # Apply translations to our result list
+        for seg in active:
+            idx = seg["index"]
+            if idx in window_translations:
+                text = normalize_romanian(window_translations[idx])
+                translated[start + (idx - active[0]["index"])]["text"] = text
+
+                # Track glossary introductions
+                for arabic, info in glossary.items():
+                    trans = info["transliteration"]
+                    if trans.lower() in text.lower():
+                        introduced_terms.add(trans)
+            else:
+                # Parser fallback — segment missing from API response. Mark with ~
+                # so the Layer 2 reviewer (Pass 0) will catch it and produce a
+                # real Romanian translation. Never leave a flag-only segment.
+                translated[start + (idx - active[0]["index"])]["text"] = f"~{seg['text']}"
+                logger.warning("Segment %d not in response", idx)
+
+    if progress_cb:
+        progress_cb("translate", 60, "Stage 2/4 complete. Starting quality review...")
+
+    return translated
+
+
+# ── Step 3: Quality Review Pass (Layer 2) ────────────────────────────
+
+def _build_step3_review_prompt(source_language: str, glossary: dict) -> str:
+    """Short, polish-only system prompt for Stage 3 (Romanian quality review)."""
+    return f"""You are reviewing a Romanian subtitle translation for naturalness and grammar.
+
+The translation is already accurate — DO NOT change the meaning. Only fix how it sounds in Romanian.
+
+FIX THESE PATTERNS:
+1. Stiff phrasing: "Aceasta este falsă" → "Așa ceva este fals". Use natural spoken Romanian, not textbook.
+2. Dangling pronouns: if "-l", "-o", "lui", "ei" has no clear antecedent in the same or previous subtitle, replace with the actual noun or "acest lucru" / "aceasta".
+3. Heavy relative clauses: "pe care nu îl cunoaște" → "ce nu cunoaște". Simplify.
+4. Contractions: use "n-are", "nu-i", "e" instead of "este" where natural.
+5. Repetition: don't reuse the same connector ("aceasta", "pentru că", "atunci") in consecutive segments.
+6. Arabic verbal nouns: "evitarea lui" → "a evita acest lucru".
+7. Singular/plural: if the speaker is talking about himself (eu), keep singular — never inflate to "noi"/"noastră".
+
+DO NOT change:
+- Theological terms or glossary words
+- The MEANING of any segment
+- Proper nouns and names (people, places, books)
+- Quran/hadith/du'a quotes — these were already translated correctly in Stage 2
+- Diacritics that are already correct
+
+OUTPUT FORMAT (one segment per line):
+{{index}}|{{polished text}}
+
+Return EVERY segment, even unchanged ones. No explanations, no commentary."""
+
+
+def _build_step3_review_user_message(original_segments: list[dict],
+                                     translated_segments: list[dict],
+                                     context_original: list[dict] = None,
+                                     context_translated: list[dict] = None) -> str:
+    """Build the user message for a review window."""
+    parts = []
+
+    if context_original and context_translated:
+        parts.append("## CONTEXT (already reviewed -- for flow reference only):")
+        for orig, trans in zip(context_original, context_translated):
+            parts.append(f"[{orig['index']}] {orig['text']}  =>  {trans['text']}")
+        parts.append("")
+
+    parts.append("## REVIEW THESE SEGMENTS:")
+    parts.append("")
+    parts.append(f"### ORIGINAL:")
+    for seg in original_segments:
+        parts.append(f"[{seg['index']}] {seg['text']}")
+    parts.append("")
+    parts.append(f"### DRAFT TRANSLATION:")
+    for seg in translated_segments:
+        parts.append(f"[{seg['index']}] {seg['text']}")
+
+    return "\n".join(parts)
+
+
+def run_step3_review(client, model_id: str,
+                     original_segments: list[dict],
+                     translated_segments: list[dict],
+                     source_language: str, glossary: dict,
+                     progress_cb=None) -> list[dict]:
+    """
+    Step 3: Quality review pass (Layer 2 — polish and error correction).
+    Sends original + draft to Claude for review. Uses windowing for long videos.
+    Returns the reviewed/corrected translated segments.
+    """
+    system_prompt = _build_step3_review_prompt(source_language, glossary)
+    num_segments = len(translated_segments)
+
+    # Make a working copy
+    reviewed = [{**seg} for seg in translated_segments]
+
+    if num_segments <= 80:
+        # Single call — send everything
+        logger.info("Step 3: Reviewing all %d segments in single call", num_segments)
+        if progress_cb:
+            progress_cb("translate", 65, "Stage 3/4: Polishing Romanian (all segments)...")
+
+        user_message = _build_step3_review_user_message(original_segments, translated_segments)
+        response_text = _call_claude(client, model_id, system_prompt, user_message,
+                                     max_tokens=8192)
+        corrections = _parse_window_response(response_text)
+
+        applied = 0
+        for seg in reviewed:
+            if seg["index"] in corrections:
+                new_text = normalize_romanian(corrections[seg["index"]])
+                if new_text != seg["text"]:
+                    seg["text"] = new_text
+                    applied += 1
+
+        logger.info("Step 3: Applied %d corrections out of %d segments", applied, num_segments)
+
+    else:
+        # Windowed review for long videos
+        window_size = REVIEW_WINDOW_SIZE
+        overlap = REVIEW_WINDOW_OVERLAP
+        num_windows = max(1, math.ceil(num_segments / window_size))
+
+        logger.info("Step 3: Reviewing %d segments in %d windows (size=%d, overlap=%d)",
+                    num_segments, num_windows, window_size, overlap)
+
+        total_applied = 0
+        for win_idx in range(num_windows):
+            start = win_idx * window_size
+            end = min(start + window_size, num_segments)
+
+            active_orig = original_segments[start:end]
+            active_trans = translated_segments[start:end]
+
+            # Context: already-reviewed segments before the window
+            ctx_start = max(0, start - overlap)
+            ctx_orig = original_segments[ctx_start:start] if start > 0 else None
+            ctx_trans = reviewed[ctx_start:start] if start > 0 else None
+
+            # Progress: Stage 3 occupies 60-95% range
+            pct = int(60 + (win_idx / num_windows) * 35)
+            msg = f"Stage 3/4: Polishing window {win_idx + 1}/{num_windows} (segments {start + 1}-{end})..."
+            logger.info(msg)
+            if progress_cb:
+                progress_cb("translate", pct, msg)
+
+            user_message = _build_step3_review_user_message(
+                active_orig, active_trans, ctx_orig, ctx_trans
+            )
+            response_text = _call_claude(client, model_id, system_prompt, user_message,
+                                         max_tokens=8192)
+            corrections = _parse_window_response(response_text)
+
+            applied = 0
+            for seg in reviewed[start:end]:
+                if seg["index"] in corrections:
+                    new_text = normalize_romanian(corrections[seg["index"]])
+                    if new_text != seg["text"]:
+                        seg["text"] = new_text
+                        applied += 1
+
+            total_applied += applied
+            logger.info("  Window %d: %d corrections applied", win_idx + 1, applied)
+
+        logger.info("Step 3: Total %d corrections across %d windows", total_applied, num_windows)
+
+    if progress_cb:
+        progress_cb("translate", 95, "Stage 3/4 complete.")
+
+    return reviewed
+
+
+# ── Stage 4: Subtitle Validation (Python only — no LLM) ──────────────
+
+def _reflow_two_lines(text: str, max_chars: int = 42) -> str:
+    """Reflow text into at most 2 lines, splitting at the closest space to midpoint."""
+    flat = text.replace("\\N", " ").replace("\n", " ")
+    flat = " ".join(flat.split())  # collapse whitespace
+    if len(flat) <= max_chars:
+        return flat
+    # Find best split near the middle
+    mid = len(flat) // 2
+    best = None
+    for offset in range(min(mid, 30)):
+        if mid - offset > 0 and flat[mid - offset] == " ":
+            best = mid - offset
+            break
+        if mid + offset < len(flat) and flat[mid + offset] == " ":
+            best = mid + offset
+            break
+    if best is None:
+        return flat  # no space found — leave as-is
+    return flat[:best].rstrip() + "\\N" + flat[best:].lstrip()
+
+
+def validate_subtitles(segments: list[dict]) -> tuple[list[dict], list[str]]:
+    """
+    Stage 4: Deterministic subtitle validation. No LLM calls.
+
+    - Normalizes diacritics (cedilla → comma-below)
+    - Reflows segments with 3+ lines down to 2 lines
+    - Warns when a single line exceeds 42 chars
+    - Warns when reading speed exceeds 21 chars/sec
+
+    Returns (segments, warnings).
+    """
+    warnings: list[str] = []
+
+    for seg in segments:
+        text = normalize_romanian(seg["text"])
+
+        # Reflow if 3+ lines
+        lines = text.split("\\N") if "\\N" in text else text.split("\n")
+        if len(lines) > 2:
+            text = _reflow_two_lines(text)
+            lines = text.split("\\N")
+
+        # Per-line char check (warning only — adaptive font handles overflow)
+        for ln in lines:
+            if len(ln) > 42:
+                warnings.append(
+                    f"Seg {seg['index']}: line exceeds 42 chars ({len(ln)})"
+                )
+
+        # Reading-speed check
+        duration = max(seg["end"] - seg["start"], 0.1)
+        visible = text.replace("\\N", "").replace("\n", "")
+        cps = len(visible) / duration
+        if cps > MAX_READING_SPEED:
+            warnings.append(
+                f"Seg {seg['index']}: reading speed {cps:.1f} cps (max {MAX_READING_SPEED})"
+            )
+
+        seg["text"] = text
+
+    return segments, warnings
+
+
+# ── Claude API helper ────────────────────────────────────────────────
+
+def _call_claude(client, model_id: str, system_prompt: str, user_message: str,
+                 max_tokens: int = 4096,
+                 max_retries: int = TRANSLATION_MAX_RETRIES) -> str:
+    """Call Claude API with retries and exponential backoff. Returns response text."""
     for attempt in range(max_retries):
         try:
             response = client.messages.create(
                 model=model_id,
-                max_tokens=4096,
+                max_tokens=max_tokens,
                 system=system_prompt,
                 messages=[{"role": "user", "content": user_message}],
             )
-            response_text = response.content[0].text
-            translations = parse_translation_response(response_text, len(segments))
-
-            if len(translations) < len(segments):
-                missing = [s["index"] for s in segments if s["index"] not in translations]
-                print(f"  Warning: missing translations for segments {missing}")
-
-            return translations
-
+            return response.content[0].text
         except Exception as e:
             wait_time = 2 ** attempt * 5  # 5s, 10s, 20s
-            print(f"  API error (attempt {attempt + 1}/{max_retries}): {e}")
+            logger.error("API error (attempt %d/%d): %s", attempt + 1, max_retries, e)
             if attempt < max_retries - 1:
-                print(f"  Retrying in {wait_time}s...")
+                logger.info("Retrying in %ds...", wait_time)
                 time.sleep(wait_time)
             else:
                 raise
 
 
-def translate_single_segment(segment: dict, source_language: str,
-                             claude_model: str = None) -> str:
-    """
-    Translate a single segment via Claude API (used for re-translation in review UI).
+# ── Single-segment retranslation (for review UI) ────────────────────
 
-    Returns the translated text.
+def translate_single_segment(segment: dict, source_language: str,
+                             claude_model: str = None,
+                             prev_original: list[dict] = None,
+                             prev_translated: list[dict] = None,
+                             next_original: list[dict] = None,
+                             summary: dict = None,
+                             introduced_terms: set = None) -> str:
+    """
+    Translate a single segment via Claude API with full context.
+
+    Sends: system prompt (built from full glossary + summary) + N previous
+    translated segments (context) + the target segment + N next original
+    segments (lookahead). The system prompt is also annotated with which
+    glossary terms have already been introduced earlier in the video so
+    Claude knows whether to use the first-occurrence explanation or just
+    the transliteration.
+
+    Returns the translated text for the single segment.
     """
     import anthropic
 
@@ -182,36 +615,67 @@ def translate_single_segment(segment: dict, source_language: str,
     model_id = CLAUDE_MODELS.get(claude_model, claude_model)
 
     glossary = load_glossary()
-    system_prompt = build_system_prompt(source_language, glossary, set())
+
+    if summary is None:
+        summary = {"speaker": "Unknown", "topic": "Islamic lecture",
+                   "content_summary": "", "detected_terms": {},
+                   "transcription_errors": []}
+
+    system_prompt = _build_step2_system_prompt(source_language, glossary, summary)
+
+    # Annotate system prompt with already-introduced glossary terms so Claude
+    # knows whether to repeat the first-occurrence explanation.
+    if introduced_terms:
+        intro_list = ", ".join(sorted(introduced_terms))
+        system_prompt += (
+            "\n\n## ALREADY-INTRODUCED GLOSSARY TERMS\n"
+            f"The following terms have already appeared earlier in this video and were "
+            f"introduced with their Romanian explanation: {intro_list}.\n"
+            f"For these terms, use ONLY the transliteration (no parenthetical explanation). "
+            f"Treat any other glossary term as a first occurrence."
+        )
 
     client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-    user_message = build_batch_input([segment])
 
-    response = client.messages.create(
-        model=model_id,
-        max_tokens=1024,
-        system=system_prompt,
-        messages=[{"role": "user", "content": user_message}],
+    # Build context-aware user message: previous (translated) + active + lookahead (original)
+    context_segs = []
+    if prev_original and prev_translated:
+        for orig, trans in zip(prev_original, prev_translated):
+            context_segs.append({"index": orig["index"], "text": trans["text"]})
+
+    user_message = _build_step2_user_message(
+        context_segments=context_segs,
+        active_segments=[segment],
+        lookahead_segments=next_original or [],
     )
 
-    response_text = response.content[0].text
-    translations = parse_translation_response(response_text, 1)
+    response_text = _call_claude(client, model_id, system_prompt, user_message, max_tokens=1024)
+    translations = _parse_window_response(response_text)
 
     if segment["index"] in translations:
-        text = normalize_romanian(translations[segment["index"]])
-        return text
+        return normalize_romanian(translations[segment["index"]])
 
     # Fallback: return the raw response if parsing failed
     return normalize_romanian(response_text.strip())
 
 
-def run_translation(job_id: str, claude_model: str = None) -> str:
+# ── Main orchestration ───────────────────────────────────────────────
+
+def run_translation(job_id: str, claude_model: str = None,
+                    progress_cb=None) -> str:
     """
-    Translate all segments for the given job.
+    Translate all segments for the given job using the 4-stage pipeline.
+
+    Stages:
+        1. Document analysis — speaker, topic, glossary terms, real errors (0-5%)
+        2. Raw translation — sliding window, accuracy focus only (5-60%)
+        3. Quality review — Romanian polish (naturalness, grammar) (60-95%)
+        4. Subtitle validation — Python only, no LLM (95-100%)
 
     Args:
         job_id: The job identifier
         claude_model: "sonnet" or "opus"
+        progress_cb: Optional callback(step, progress_pct, message) for SSE progress
 
     Returns:
         Path to the output Romanian SRT file.
@@ -219,7 +683,7 @@ def run_translation(job_id: str, claude_model: str = None) -> str:
     import anthropic
 
     if not ANTHROPIC_API_KEY:
-        raise ValueError("ANTHROPIC_API_KEY not set in .env — add your key to the .env file")
+        raise ValueError("ANTHROPIC_API_KEY not set in .env -- add your key to the .env file")
 
     if claude_model is None:
         claude_model = DEFAULT_CLAUDE_MODEL
@@ -242,138 +706,110 @@ def run_translation(job_id: str, claude_model: str = None) -> str:
     if not segments:
         raise ValueError("No segments found in the original SRT file")
 
-    print(f"Job: {job_id}")
-    print(f"Segments: {len(segments)}")
-    print(f"Claude model: {claude_model} ({model_id})")
-    print()
+    logger.info("Job: %s | Segments: %d | Model: %s (%s)",
+                job_id, len(segments), claude_model, model_id)
 
     # Resegment if needed (split long segments)
     original_count = len(segments)
     segments = resegment(segments)
     if len(segments) != original_count:
-        print(f"  Resegmented: {original_count} → {len(segments)} segments")
-        # Save resegmented original
+        logger.info("Resegmented: %d -> %d segments", original_count, len(segments))
         write_srt(segments, srt_original)
 
-    # Update job status
-    job_info["status"] = "translating"
-    job_info["claude_model"] = claude_model
-    with open(info_path, "w", encoding="utf-8") as f:
-        json.dump(job_info, f, indent=2, ensure_ascii=False)
-
-    # Load glossary
+    # Load glossary and determine source language
     glossary = load_glossary()
     source_language = job_info.get("source_language", "auto")
     detected_language = job_info.get("detected_language", source_language)
-    lang_name = {"ar": "Arabic", "en": "English"}.get(detected_language, detected_language)
+    lang_name = {"ar": "Arabic", "en": "English", "fr": "French",
+                 "ur": "Urdu"}.get(detected_language, detected_language)
 
-    print(f"  Source language: {lang_name}")
-    print(f"  Glossary terms: {len(glossary)}")
-    print()
+    video_title = job_info.get("video_title", "Unknown")
+
+    logger.info("Source language: %s | Glossary terms: %d", lang_name, len(glossary))
 
     # Initialize Claude client
     client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 
-    # Track introduced glossary terms across batches
-    introduced_terms = set()
+    # ── Step 1: Summary pass (0-5%) ──────────────────────────────────
+    summary = run_step1_summary(client, model_id, segments, lang_name,
+                                glossary, video_title, progress_cb)
 
-    # Translate in batches
-    batch_size = TRANSLATION_BATCH_SIZE
-    total_batches = (len(segments) + batch_size - 1) // batch_size
-    translated_segments = []
-    total_input_tokens = 0
-    total_output_tokens = 0
+    # Save summary and title to job_info
+    job_info["document_summary"] = summary
+    job_info["title_romanian"] = summary.get("title_romanian", video_title)
+    with open(info_path, "w", encoding="utf-8") as f:
+        json.dump(job_info, f, indent=2, ensure_ascii=False)
 
-    for batch_idx in range(total_batches):
-        start = batch_idx * batch_size
-        end = min(start + batch_size, len(segments))
-        batch = segments[start:end]
+    # ── Step 2: Translation pass — Layer 1 (5-55%) ───────────────────
+    translated_segments = run_step2_translation(client, model_id, segments,
+                                                lang_name, glossary, summary,
+                                                progress_cb)
 
-        # Context: last N segments from previous batch
-        context = []
-        if batch_idx > 0 and translated_segments:
-            context_start = max(0, len(translated_segments) - TRANSLATION_CONTEXT_SIZE)
-            context = translated_segments[context_start:]
+    # Save draft after Layer 1
+    write_srt(translated_segments, srt_romanian)
 
-        print(f"  Batch {batch_idx + 1}/{total_batches} "
-              f"(segments {start + 1}-{end} of {len(segments)})...")
+    # ── Step 3: Quality review pass — Layer 2 (55-85%) ───────────────
+    translated_segments = run_step3_review(client, model_id,
+                                           segments, translated_segments,
+                                           lang_name, glossary,
+                                           progress_cb)
 
-        # Build system prompt with current introduced terms
-        system_prompt = build_system_prompt(lang_name, glossary, introduced_terms)
+    # Save after Stage 3
+    write_srt(translated_segments, srt_romanian)
 
-        # Translate
-        batch_start = time.time()
-        translations = translate_batch(
-            client, model_id, system_prompt, batch, context
-        )
-        batch_time = time.time() - batch_start
+    # ── Stage 4: Subtitle validation (Python only, no LLM) ───────────
+    if progress_cb:
+        progress_cb("translate", 95, "Stage 4/4: Validating subtitles...")
 
-        # Apply translations
-        for seg in batch:
-            idx = seg["index"]
-            if idx in translations:
-                translated_text = normalize_romanian(translations[idx])
-                translated_seg = {**seg, "text": translated_text}
-            else:
-                # Keep original if translation missing
-                translated_seg = {**seg, "text": f"[UNTRANSLATED] {seg['text']}"}
-                print(f"    Warning: segment {idx} not translated")
+    translated_segments, validation_warnings = validate_subtitles(translated_segments)
+    write_srt(translated_segments, srt_romanian)
 
-            translated_segments.append(translated_seg)
+    if validation_warnings:
+        logger.info("Stage 4: %d validation warnings", len(validation_warnings))
+        for w in validation_warnings[:20]:
+            logger.info("  %s", w)
 
-            # Track which glossary terms were introduced
-            for arabic, info in glossary.items():
-                trans = info["transliteration"]
-                if trans.lower() in translated_text.lower():
-                    introduced_terms.add(trans)
-
-        print(f"    Done in {batch_time:.1f}s")
-
-        # Save progress incrementally
-        write_srt(translated_segments, srt_romanian)
-
-    # Final validation
-    print()
-    print("Validating translations...")
-    speed_warnings = 0
-    for seg in translated_segments:
-        speed = check_reading_speed(seg)
-        if speed > MAX_READING_SPEED:
-            speed_warnings += 1
-
-    if speed_warnings:
-        print(f"  Warning: {speed_warnings} segments exceed {MAX_READING_SPEED} chars/sec reading speed")
-        print("  These will be highlighted in the review UI for editing")
-    else:
-        print("  All segments within reading speed limits")
+    speed_warnings = sum(1 for seg in translated_segments
+                         if check_reading_speed(seg) > MAX_READING_SPEED)
 
     # Update job info
     job_info["status"] = "translated"
     job_info["srt_romanian_path"] = str(srt_romanian)
     job_info["translated_segment_count"] = len(translated_segments)
     job_info["speed_warnings"] = speed_warnings
+    job_info["validation_warnings"] = validation_warnings
+    job_info["claude_model"] = claude_model
     with open(info_path, "w", encoding="utf-8") as f:
         json.dump(job_info, f, indent=2, ensure_ascii=False)
 
-    print()
-    print(f"Done! {len(translated_segments)} segments translated → {srt_romanian}")
+    if progress_cb:
+        progress_cb("translate", 100, f"Translation complete! {len(translated_segments)} segments.")
+
+    logger.info("Done! %d segments translated -> %s", len(translated_segments), srt_romanian)
     return str(srt_romanian)
 
 
-# ── Standalone entry point ────────────────────────────────────────────
+# ── Standalone entry point ───────────────────────────────────────────
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Translate subtitles with Claude")
+    logging.basicConfig(level=logging.INFO,
+                        format="[Translate] %(message)s")
+
+    parser = argparse.ArgumentParser(description="Translate subtitles with Claude (two-layer)")
     parser.add_argument("job_id", help="Job ID to translate")
-    parser.add_argument("--claude-model", default=None, choices=["sonnet", "opus"],
+    parser.add_argument("--model", default=None, dest="claude_model",
+                        choices=["sonnet", "opus"],
                         help="Claude model (default: sonnet)")
     args = parser.parse_args()
 
     print("=" * 60)
-    print("DAWAH-TRANSLATE — Subtitle Translation")
+    print("DAWAH-TRANSLATE -- Subtitle Translation (V3 Two-Layer)")
     print("=" * 60)
 
+    def _cli_progress(step, pct, msg):
+        print(f"  [{step}] {pct}% | {msg}")
+
     try:
-        srt_path = run_translation(args.job_id, args.claude_model)
+        srt_path = run_translation(args.job_id, args.claude_model, progress_cb=_cli_progress)
         print()
         print(f"Next step: Review at http://localhost:8000/review/{args.job_id}")
     except Exception as e:

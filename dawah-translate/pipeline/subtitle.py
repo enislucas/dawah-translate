@@ -257,18 +257,21 @@ def _split_words_into_blocks(words: list[str], max_chars_per_line: int,
 
 # ── SRT → ASS conversion ─────────────────────────────────────────────
 
-ASS_HEADER = """[Script Info]
-ScriptType: v4.00+
-PlayResX: 1920
-PlayResY: 1080
-
-[V4+ Styles]
-Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,Noto Sans,56,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,3,1,2,30,30,40,1
-
-[Events]
-Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
-"""
+def _build_ass_header(play_res_y: int = 1080, margin_v: int = 40) -> str:
+    """Build ASS header. play_res_y / margin_v can be adjusted for black-bar mode."""
+    return (
+        "[Script Info]\n"
+        "ScriptType: v4.00+\n"
+        "PlayResX: 1920\n"
+        f"PlayResY: {play_res_y}\n"
+        "\n"
+        "[V4+ Styles]\n"
+        "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n"
+        f"Style: Default,Noto Sans,56,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,3,1,2,30,30,{margin_v},1\n"
+        "\n"
+        "[Events]\n"
+        "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
+    )
 
 
 def _to_ass_timestamp(seconds: float) -> str:
@@ -280,24 +283,63 @@ def _to_ass_timestamp(seconds: float) -> str:
     return f"{hours}:{minutes:02d}:{secs:02d}.{centisecs:02d}"
 
 
+DEFAULT_ASS_FONT_SIZE = 56  # must match Style: Default fontsize in ASS_HEADER
+
+
+def _adaptive_font_size(text: str, default_size: int = DEFAULT_ASS_FONT_SIZE) -> int | None:
+    """
+    Return a smaller font size if the text exceeds the normal 2x42 = 84 char
+    limit, otherwise None (use default). Sizes are scaled to the default.
+    """
+    char_count = len(text.replace('\\N', '').replace('\n', ''))
+    if char_count > 100:
+        # Very long: ~73% of default
+        return max(int(default_size * 0.73), 32)
+    if char_count > 84:
+        # Slightly long: ~86% of default
+        return max(int(default_size * 0.86), 36)
+    return None
+
+
 def srt_to_ass(srt_path: str | Path, ass_path: str | Path,
-               font_dir: str | Path = None) -> None:
+               font_dir: str | Path = None,
+               extra_height: int = 0) -> None:
     """
     Convert an SRT file to ASS format with the dawah-translate subtitle style.
+    Long segments (>84 visible chars) get a smaller font via inline {\\fs} tags
+    so they don't overflow the screen edge.
 
     Args:
         srt_path: Path to input SRT file
         ass_path: Path to output ASS file
         font_dir: Path to fonts directory (unused in ASS content, used by FFmpeg)
+        extra_height: Extra ASS canvas height (px in PlayRes coords) added below
+            the video. Used by black-bar mode so subtitles render in the bar
+            rather than over the video frame. 0 = overlay mode.
     """
     segments = parse_srt(srt_path)
 
+    # PlayResX is fixed at 1920. Scale extra_height into PlayRes Y space —
+    # since PlayResY is normally 1080, the bar height in ASS coords is the
+    # same value the caller passed in (which is sized for a 1080p canvas).
+    play_res_y = 1080 + extra_height
+    # Push the subtitle baseline down into the bar by raising MarginV.
+    # MarginV measures distance from the bottom edge of the canvas; we want
+    # the subtitle vertically centered in the bar.
+    margin_v = max(40, extra_height // 4) if extra_height > 0 else 40
+
     with open(ass_path, "w", encoding="utf-8-sig") as f:
-        f.write(ASS_HEADER)
+        f.write(_build_ass_header(play_res_y=play_res_y, margin_v=margin_v))
 
         for seg in segments:
             start = _to_ass_timestamp(seg["start"])
             end = _to_ass_timestamp(seg["end"])
             # ASS uses \N for line breaks instead of \n
             text = seg["text"].replace('\n', '\\N')
+
+            # Apply adaptive font size for long segments
+            adaptive = _adaptive_font_size(text)
+            if adaptive is not None:
+                text = f"{{\\fs{adaptive}}}{text}"
+
             f.write(f"Dialogue: 0,{start},{end},Default,,0,0,0,,{text}\n")

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Review Subtitles — Dawah-Translate</title>
+    <title>Review Subtitles — Dawah-Translate V3</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
@@ -114,10 +114,18 @@
             border-left: 3px solid #3b82f6;
         }
         tr.too-fast td { background: rgba(239, 68, 68, 0.1); }
+        tr.too-long td { background: rgba(245, 158, 11, 0.08); }
+        tr.too-long td:first-child::after {
+            content: "⚠";
+            color: #f59e0b;
+            margin-left: 0.25rem;
+            font-weight: bold;
+            title: "Long segment — may overflow";
+        }
 
         /* Column widths */
         .col-idx { width: 3rem; text-align: center; color: #64748b; }
-        .col-time { width: 10rem; font-family: monospace; font-size: 0.8rem; color: #94a3b8; white-space: nowrap; }
+        .col-time { width: 11rem; font-family: monospace; font-size: 0.8rem; color: #94a3b8; white-space: nowrap; }
         .col-original { width: 30%; color: #94a3b8; font-size: 0.85rem; }
         .col-romanian { min-width: 30%; }
         .col-speed { width: 5rem; text-align: center; }
@@ -312,6 +320,114 @@
         .qscore.good { color: #4ade80; }
         .qscore.ok { color: #fbbf24; }
         .qscore.bad { color: #f87171; }
+
+        /* Transcription error rows */
+        tr.transcription-error {
+            border-left: 3px solid #ef4444 !important;
+            background: rgba(239, 68, 68, 0.08) !important;
+        }
+        .transcription-error-info {
+            margin-top: 0.3rem;
+            padding: 0.3rem 0.5rem;
+            background: rgba(239, 68, 68, 0.12);
+            border-radius: 4px;
+            font-size: 0.75rem;
+            line-height: 1.4;
+            color: #fca5a5;
+        }
+        .transcription-error-info strong {
+            color: #f87171;
+        }
+        .transcription-error-info .likely-correct {
+            color: #4ade80;
+            font-style: italic;
+        }
+
+        /* Editable timestamps */
+        .time-input {
+            background: transparent;
+            border: 1px solid transparent;
+            color: #94a3b8;
+            font-family: monospace;
+            font-size: 0.8rem;
+            width: 8rem;
+            padding: 0.15rem 0.3rem;
+            border-radius: 3px;
+        }
+        .time-input:hover { border-color: #475569; }
+        .time-input:focus { border-color: #3b82f6; outline: none; background: #0f172a; color: #e2e8f0; }
+        .time-input.saving { border-color: #22c55e; }
+
+        /* Manually edited badge */
+        .badge-edited {
+            display: inline-block;
+            font-size: 0.6rem;
+            background: #1e3a5f;
+            color: #60a5fa;
+            padding: 0.1rem 0.35rem;
+            border-radius: 3px;
+            margin-left: 0.3rem;
+            vertical-align: middle;
+        }
+
+        /* Feedback buttons */
+        .feedback-btns {
+            display: inline-flex;
+            gap: 0.2rem;
+            margin-left: 0.3rem;
+        }
+        .feedback-btns button {
+            background: transparent;
+            border: 1px solid #334155;
+            color: #64748b;
+            font-size: 0.75rem;
+            padding: 0.15rem 0.35rem;
+            border-radius: 3px;
+            cursor: pointer;
+            line-height: 1;
+        }
+        .feedback-btns button:hover { border-color: #475569; color: #cbd5e1; }
+        .feedback-btns button.active-good { border-color: #16a34a; color: #4ade80; background: rgba(22, 163, 74, 0.15); }
+        .feedback-btns button.active-bad { border-color: #dc2626; color: #f87171; background: rgba(220, 38, 38, 0.15); }
+
+        /* Editable title */
+        .title-editable {
+            background: transparent;
+            border: 1px solid transparent;
+            color: #e2e8f0;
+            font-size: 1rem;
+            font-weight: 600;
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            min-width: 20rem;
+            max-width: 40rem;
+        }
+        .title-editable:hover { border-color: #475569; }
+        .title-editable:focus { border-color: #3b82f6; outline: none; background: #0f172a; }
+        .title-label {
+            font-size: 0.7rem;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-right: 0.5rem;
+        }
+
+        /* Progress bar (retranslate / burn) */
+        .progress-inline {
+            height: 3px;
+            background: #334155;
+            border-radius: 2px;
+            overflow: hidden;
+            margin-top: 0.3rem;
+            display: none;
+        }
+        .progress-inline .fill {
+            height: 100%;
+            background: #3b82f6;
+            border-radius: 2px;
+            transition: width 0.3s;
+            width: 0%;
+        }
     </style>
 </head>
 <body>
@@ -320,15 +436,20 @@
     <div id="app" style="display: none; height: 100vh; display: none; flex-direction: column;">
         <!-- Header -->
         <div class="header">
-            <div style="display: flex; align-items: center;">
-                <h1>Review Subtitles</h1>
-                <span class="title-info" id="videoTitle"></span>
+            <div style="display: flex; align-items: center; gap: 1rem; flex: 1; min-width: 0;">
+                <h1 style="flex-shrink: 0;">Review</h1>
+                <span class="title-label">RO Title:</span>
+                <input type="text" class="title-editable" id="titleRomanian"
+                       placeholder="Titlu în română..."
+                       onblur="saveTitle()" onkeydown="if(event.key==='Enter'){this.blur();}">
+                <span class="title-info" id="videoTitle" style="flex-shrink: 0;"></span>
             </div>
-            <div>
+            <div style="flex-shrink: 0;">
                 <span class="shortcuts">
                     <kbd>Space</kbd> play/pause &nbsp;
-                    <kbd>&larr;</kbd><kbd>&rarr;</kbd> prev/next segment &nbsp;
-                    <kbd>Enter</kbd> play segment
+                    <kbd>&larr;</kbd><kbd>&rarr;</kbd> prev/next &nbsp;
+                    <kbd>[</kbd><kbd>]</kbd> adjust time &nbsp;
+                    <kbd>Enter</kbd> play
                 </span>
                 &nbsp;&nbsp;
                 <a href="/">Back to Home</a>
@@ -353,12 +474,12 @@
                 <thead>
                     <tr>
                         <th class="col-idx">#</th>
-                        <th class="col-time">Timecode</th>
+                        <th class="col-time">Start / End</th>
                         <th class="col-original">Original</th>
                         <th class="col-romanian">Romanian (editable)</th>
                         <th class="col-speed">CPS</th>
                         <th class="col-quality">QA</th>
-                        <th class="col-actions">Action</th>
+                        <th class="col-actions">Actions</th>
                     </tr>
                 </thead>
                 <tbody id="subtitleBody"></tbody>
@@ -370,6 +491,9 @@
             <div class="info" id="bottomInfo">Loading...</div>
             <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
                 <span id="burnStatus" style="color: #94a3b8; font-size: 0.9rem;"></span>
+                <div class="progress-inline" id="burnProgress" style="width: 120px;">
+                    <div class="fill" id="burnProgressFill"></div>
+                </div>
                 <!-- Export dropdown -->
                 <div style="position: relative; display: inline-block;">
                     <button class="btn-small" onclick="toggleExportMenu()" style="padding: 0.6rem 1rem; font-size: 0.85rem;">Export</button>
@@ -418,7 +542,11 @@
             return;
         }
 
-        document.getElementById('videoTitle').textContent = info.video_title || '';
+        document.getElementById('videoTitle').textContent = info.video_title ? `(${info.video_title})` : '';
+
+        // Load Romanian title if available
+        const titleInput = document.getElementById('titleRomanian');
+        titleInput.value = info.title_romanian || '';
 
         // Set video source
         video.src = `/api/job/${jobId}/video`;
@@ -480,14 +608,16 @@
     // ── Render subtitle table ────────────────────────────────────────
     function renderTable() {
         subtitleBody.innerHTML = segments.map((seg, i) => {
-            const startTime = formatTime(seg.start);
-            const endTime = formatTime(seg.end);
             const speedClass = seg.reading_speed > 21 ? 'danger' : seg.reading_speed > 18 ? 'warn' : 'ok';
 
             // Quality classes
             let rowClass = seg.too_fast ? 'too-fast' : '';
             if (seg.has_critical) rowClass += ' quality-critical';
             else if (seg.has_warning) rowClass += ' quality-warning';
+
+            // Long-segment warning (overflow risk)
+            const visibleChars = (seg.text || '').replace(/\\n|\n/g, '').length;
+            if (visibleChars > 84) rowClass += ' too-long';
 
             // Quality score display
             const qs = seg.quality_score;
@@ -503,10 +633,36 @@
                     ).join('') + '</div>';
             }
 
+            // Transcription error
+            if (seg.transcription_error) rowClass += ' transcription-error';
+
+            let errorHtml = '';
+            if (seg.transcription_error) {
+                const te = seg.transcription_error;
+                errorHtml = '<div class="transcription-error-info">' +
+                    '<strong>Transcription error:</strong> ' + escapeHtml(te.issue) +
+                    (te.likely_correct ? '<br>Likely correct: <span class="likely-correct">' + escapeHtml(te.likely_correct) + '</span>' : '') +
+                    '</div>';
+            }
+
+            // Edited badge
+            const editedBadge = seg.manually_edited ? '<span class="badge-edited">edited</span>' : '';
+
+            // Feedback buttons
+            const goodActive = seg.feedback_rating === 'good' ? ' active-good' : '';
+            const badActive = seg.feedback_rating === 'bad' ? ' active-bad' : '';
+
             return `<tr id="row-${i}" class="${rowClass}" data-index="${i}" onclick="seekToSegment(${i})">
-                <td class="col-idx" style="position:relative;">${seg.index}</td>
-                <td class="col-time">${startTime}<br>${endTime}</td>
-                <td class="col-original">${escapeHtml(seg.original_text)}</td>
+                <td class="col-idx" style="position:relative;">${seg.index}${editedBadge}</td>
+                <td class="col-time">
+                    <input type="text" class="time-input" id="start-${i}" value="${formatTime(seg.start)}"
+                           onfocus="this.select()" onblur="onTimeBlur(${i}, 'start')"
+                           onkeydown="onTimeKeydown(event, ${i}, 'start')" onclick="event.stopPropagation()">
+                    <input type="text" class="time-input" id="end-${i}" value="${formatTime(seg.end)}"
+                           onfocus="this.select()" onblur="onTimeBlur(${i}, 'end')"
+                           onkeydown="onTimeKeydown(event, ${i}, 'end')" onclick="event.stopPropagation()">
+                </td>
+                <td class="col-original">${escapeHtml(seg.original_text)}${errorHtml}</td>
                 <td class="col-romanian">
                     <div class="editable" contenteditable="true"
                          id="edit-${i}"
@@ -520,7 +676,13 @@
                 </td>
                 <td class="col-quality">${qsDisplay}</td>
                 <td class="col-actions">
-                    <button class="btn-small" onclick="event.stopPropagation(); retranslate(${i})" title="Re-translate this segment">Re-translate</button>
+                    <div style="display:flex; flex-direction:column; gap:0.3rem; align-items:center;">
+                        <button class="btn-small" id="retrans-btn-${i}" onclick="event.stopPropagation(); retranslate(${i})" title="Re-translate this segment">Re-translate</button>
+                        <div class="feedback-btns">
+                            <button class="${goodActive}" onclick="event.stopPropagation(); sendFeedback(${i}, 'good')" title="Good translation">&#x2713;</button>
+                            <button class="${badActive}" onclick="event.stopPropagation(); sendFeedback(${i}, 'bad')" title="Bad translation">&#x2717;</button>
+                        </div>
+                    </div>
                 </td>
             </tr>`;
         }).join('');
@@ -568,6 +730,7 @@
 
         if (newText !== segments[idx].text) {
             segments[idx].text = newText;
+            segments[idx].manually_edited = true;
             // Recalculate reading speed
             const duration = segments[idx].end - segments[idx].start;
             const chars = newText.replace(/\n/g, '').length;
@@ -580,8 +743,15 @@
             speedEl.textContent = segments[idx].reading_speed;
             speedEl.className = 'speed ' + (segments[idx].reading_speed > 21 ? 'danger' : segments[idx].reading_speed > 18 ? 'warn' : 'ok');
 
+            // Show edited badge if not already present
+            const idxCell = row.querySelector('.col-idx');
+            if (!idxCell.querySelector('.badge-edited')) {
+                idxCell.insertAdjacentHTML('beforeend', '<span class="badge-edited">edited</span>');
+            }
+
             // Update row class
             row.classList.toggle('too-fast', segments[idx].too_fast);
+            row.classList.toggle('too-long', chars > 84);
 
             // Debounced save
             scheduleSave(el);
@@ -615,9 +785,15 @@
 
     // ── Re-translate ─────────────────────────────────────────────────
     async function retranslate(idx) {
-        const btn = document.querySelector(`#row-${idx} .btn-small`);
+        const btn = document.getElementById(`retrans-btn-${idx}`);
         btn.disabled = true;
-        btn.textContent = '...';
+        btn.textContent = 'Translating...';
+        btn.style.opacity = '0.7';
+
+        // Read the claude_model from job info (set during config screen)
+        const infoRes = await fetch(`/api/status/${jobId}`);
+        const info = await infoRes.json();
+        const model = info.claude_model || 'sonnet';
 
         try {
             const res = await fetch(`/api/job/${jobId}/retranslate`, {
@@ -626,7 +802,7 @@
                 body: JSON.stringify({
                     segment_index: segments[idx].index,
                     source_language: 'auto',
-                    claude_model: 'sonnet',
+                    claude_model: model,
                 }),
             });
             const result = await res.json();
@@ -648,12 +824,15 @@
 
                 // Save all
                 scheduleSave(editEl);
+            } else if (result.error) {
+                alert('Re-translate error: ' + result.error);
             }
         } catch (err) {
             alert('Re-translate failed: ' + err.message);
         } finally {
             btn.disabled = false;
             btn.textContent = 'Re-translate';
+            btn.style.opacity = '';
         }
     }
 
@@ -663,6 +842,10 @@
 
         burnBtn.disabled = true;
         burnStatus.textContent = 'Burning subtitles...';
+        const progressBar = document.getElementById('burnProgress');
+        const progressFill = document.getElementById('burnProgressFill');
+        progressBar.style.display = 'block';
+        progressFill.style.width = '0%';
 
         try {
             // Save current edits first
@@ -676,23 +859,34 @@
             await fetch(`/api/job/${jobId}/burn`, { method: 'POST' });
 
             // Poll for completion
+            let fakePct = 0;
             const pollBurn = setInterval(async () => {
                 const res = await fetch(`/api/status/${jobId}`);
                 const info = await res.json();
 
                 burnStatus.textContent = info.progress || info.status;
 
+                // Simulate progress (FFmpeg doesn't report %, so fake it)
+                if (info.status === 'burning') {
+                    fakePct = Math.min(fakePct + 5, 90);
+                    progressFill.style.width = fakePct + '%';
+                }
+
                 if (info.status === 'complete') {
                     clearInterval(pollBurn);
+                    progressFill.style.width = '100%';
+                    setTimeout(() => { progressBar.style.display = 'none'; }, 1000);
                     showDownloadButton();
                 } else if (info.status === 'error') {
                     clearInterval(pollBurn);
+                    progressBar.style.display = 'none';
                     burnBtn.disabled = false;
                     burnStatus.textContent = 'Error: ' + (info.error || 'Unknown');
                 }
             }, 3000);
         } catch (err) {
             burnBtn.disabled = false;
+            progressBar.style.display = 'none';
             burnStatus.textContent = 'Error: ' + err.message;
         }
     }
@@ -713,7 +907,7 @@
 
     // ── Keyboard shortcuts ───────────────────────────────────────────
     document.addEventListener('keydown', (e) => {
-        // Don't intercept when editing text
+        // Don't intercept when editing text or in input fields
         if (e.target.contentEditable === 'true' || e.target.tagName === 'INPUT') return;
 
         if (e.code === 'Space') {
@@ -733,8 +927,146 @@
                 seekToSegment(currentSegmentIdx);
                 video.play();
             }
+        } else if (e.key === '[' && currentSegmentIdx >= 0) {
+            // Shift start time earlier by 0.1s
+            e.preventDefault();
+            adjustTime(currentSegmentIdx, 'start', e.shiftKey ? -0.5 : -0.1);
+        } else if (e.key === ']' && currentSegmentIdx >= 0) {
+            // Shift start time later by 0.1s
+            e.preventDefault();
+            adjustTime(currentSegmentIdx, 'start', e.shiftKey ? 0.5 : 0.1);
+        } else if (e.key === '{' && currentSegmentIdx >= 0) {
+            // Shift+[ — adjust end time earlier
+            e.preventDefault();
+            adjustTime(currentSegmentIdx, 'end', -0.1);
+        } else if (e.key === '}' && currentSegmentIdx >= 0) {
+            // Shift+] — adjust end time later
+            e.preventDefault();
+            adjustTime(currentSegmentIdx, 'end', 0.1);
         }
     });
+
+    // ── Timestamp editing ────────────────────────────────────────────
+    function parseTime(str) {
+        // Parse "m:ss.mmm" or "mm:ss.mmm" format back to seconds
+        const match = str.match(/^(\d+):(\d{1,2})\.(\d{1,3})$/);
+        if (!match) return null;
+        return parseInt(match[1]) * 60 + parseInt(match[2]) + parseInt(match[3]) / 1000;
+    }
+
+    function onTimeBlur(idx, field) {
+        const el = document.getElementById(`${field}-${idx}`);
+        const newVal = parseTime(el.value);
+        if (newVal === null || newVal === segments[idx][field]) {
+            el.value = formatTime(segments[idx][field]);
+            return;
+        }
+        segments[idx][field] = newVal;
+        saveSegmentUpdate(idx, el);
+    }
+
+    function onTimeKeydown(event, idx, field) {
+        if (event.key === 'Enter') {
+            event.target.blur();
+            return;
+        }
+        if (event.key === 'Escape') {
+            event.target.value = formatTime(segments[idx][field]);
+            event.target.blur();
+            return;
+        }
+    }
+
+    function adjustTime(idx, field, delta) {
+        // Adjust timestamp by delta seconds (±0.1)
+        const newVal = Math.max(0, segments[idx][field] + delta);
+        segments[idx][field] = Math.round(newVal * 1000) / 1000;
+        const el = document.getElementById(`${field}-${idx}`);
+        el.value = formatTime(segments[idx][field]);
+
+        // Recalculate reading speed
+        const duration = segments[idx].end - segments[idx].start;
+        const chars = segments[idx].text.replace(/\n/g, '').replace(/\\N/g, '').length;
+        segments[idx].reading_speed = Math.round((chars / Math.max(duration, 0.1)) * 10) / 10;
+        segments[idx].too_fast = segments[idx].reading_speed > 21;
+
+        const row = document.getElementById(`row-${idx}`);
+        const speedEl = row.querySelector('.speed');
+        speedEl.textContent = segments[idx].reading_speed;
+        speedEl.className = 'speed ' + (segments[idx].reading_speed > 21 ? 'danger' : segments[idx].reading_speed > 18 ? 'warn' : 'ok');
+
+        saveSegmentUpdate(idx, el);
+    }
+
+    async function saveSegmentUpdate(idx, indicatorEl) {
+        indicatorEl.classList.add('saving');
+        try {
+            await fetch(`/api/job/${jobId}/update-segment`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    index: segments[idx].index,
+                    text: segments[idx].text,
+                    start: segments[idx].start,
+                    end: segments[idx].end,
+                }),
+            });
+            setTimeout(() => indicatorEl.classList.remove('saving'), 500);
+        } catch (err) {
+            indicatorEl.classList.add('error');
+            setTimeout(() => indicatorEl.classList.remove('error'), 2000);
+        }
+    }
+
+    // ── Feedback ──────────────────────────────────────────────────────
+    async function sendFeedback(idx, rating) {
+        // Toggle: if already this rating, clear it
+        const current = segments[idx].feedback_rating;
+        const newRating = current === rating ? '' : rating;
+        segments[idx].feedback_rating = newRating;
+
+        // Update button styles
+        const row = document.getElementById(`row-${idx}`);
+        const btns = row.querySelectorAll('.feedback-btns button');
+        btns[0].className = newRating === 'good' ? 'active-good' : '';
+        btns[1].className = newRating === 'bad' ? 'active-bad' : '';
+
+        if (!newRating) return; // cleared — no need to save
+
+        try {
+            await fetch(`/api/job/${jobId}/feedback`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    segment_index: segments[idx].index,
+                    rating: newRating,
+                }),
+            });
+        } catch (err) {
+            console.error('Feedback save failed:', err);
+        }
+    }
+
+    // ── Romanian title ───────────────────────────────────────────────
+    let titleSaveTimeout = null;
+    async function saveTitle() {
+        const input = document.getElementById('titleRomanian');
+        const title = input.value.trim();
+        if (!title) return;
+
+        if (titleSaveTimeout) clearTimeout(titleSaveTimeout);
+        titleSaveTimeout = setTimeout(async () => {
+            try {
+                await fetch(`/api/job/${jobId}/title`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ title_romanian: title }),
+                });
+            } catch (err) {
+                console.error('Title save failed:', err);
+            }
+        }, 500);
+    }
 
     // ── Utilities ────────────────────────────────────────────────────
     function formatTime(seconds) {
@@ -756,11 +1088,14 @@
         const critical = segments.filter(s => s.has_critical).length;
         const warned = segments.filter(s => s.has_warning).length;
 
+        const transErrors = segments.filter(s => s.transcription_error).length;
+
         let parts = [`${total} segments`];
+        if (transErrors > 0) parts.push(`${transErrors} transcription errors`);
         if (critical > 0) parts.push(`${critical} critical`);
         if (warned > 0) parts.push(`${warned} warnings`);
         if (tooFast > 0) parts.push(`${tooFast} too fast`);
-        if (critical === 0 && warned === 0 && tooFast === 0) parts.push('All checks passed');
+        if (critical === 0 && warned === 0 && tooFast === 0 && transErrors === 0) parts.push('All checks passed');
 
         bottomInfo.textContent = parts.join(' | ');
     }

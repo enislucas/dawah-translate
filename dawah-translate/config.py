@@ -4,8 +4,9 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 
-# Load environment variables from .env file
-load_dotenv()
+# Load environment variables from .env file (explicit path so it works
+# regardless of the working directory the server is launched from)
+load_dotenv(Path(__file__).parent / ".env")
 
 # ── Paths ──────────────────────────────────────────────────────────────
 BASE_DIR = Path(__file__).parent
@@ -35,9 +36,14 @@ WHISPER_CPU_THREADS = 8
 
 # ── Translation defaults ─────────────────────────────────────────────
 DEFAULT_CLAUDE_MODEL = "sonnet"
-TRANSLATION_BATCH_SIZE = 50
-TRANSLATION_CONTEXT_SIZE = 5     # previous segments sent as context
 TRANSLATION_MAX_RETRIES = 3
+
+# Sliding-window translation (V3 two-layer)
+WINDOW_SIZE = 50               # segments to translate per API call
+WINDOW_OVERLAP = 15            # context/lookahead segments on each side
+REVIEW_WINDOW_SIZE = 50        # segments per quality review call
+REVIEW_WINDOW_OVERLAP = 20     # more overlap for review — needs to see flow across boundaries
+CONSISTENCY_PASS_THRESHOLD = 30  # minutes — run consistency pass for videos longer than this
 
 # ── Claude model IDs ─────────────────────────────────────────────────
 CLAUDE_MODELS = {

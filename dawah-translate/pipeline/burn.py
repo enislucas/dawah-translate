@@ -54,6 +54,12 @@ def run_burn(job_id: str) -> str:
     with open(info_path, "r", encoding="utf-8") as f:
         job_info = json.load(f)
 
+    # Subtitle rendering mode: "black_bar" (default) draws subtitles in a
+    # black strip below the video so they never cover existing English subs.
+    # "overlay" burns directly on top of the video frame.
+    subtitle_mode = job_info.get("subtitle_mode", "black_bar")
+    BAR_HEIGHT = 160  # px of black strip below the video for black_bar mode
+
     video_path = job_dir / "video.mp4"
     srt_path = job_dir / "transcript_romanian.srt"
     ass_path = job_dir / "subtitles.ass"
@@ -74,10 +80,12 @@ def run_burn(job_id: str) -> str:
     print("  Font ready")
     print()
 
-    # Convert SRT → ASS
+    # Convert SRT → ASS. For black_bar mode, the ASS canvas needs to be
+    # taller so the subtitles render in the bar area, not on the video.
     print("[2/3] Converting SRT to ASS format...")
-    srt_to_ass(srt_path, ass_path, FONTS_DIR)
-    print(f"  ASS file: {ass_path}")
+    extra_height = BAR_HEIGHT if subtitle_mode == "black_bar" else 0
+    srt_to_ass(srt_path, ass_path, FONTS_DIR, extra_height=extra_height)
+    print(f"  ASS file: {ass_path}  (mode: {subtitle_mode})")
     print()
 
     # Burn subtitles with FFmpeg
@@ -97,12 +105,18 @@ def run_burn(job_id: str) -> str:
     if font_src.exists() and not font_dst.exists():
         shutil.copy2(font_src, font_dst)
 
-    # Build command using relative paths by running from the job directory
-    # This avoids all Windows path escaping issues
+    # Build command using relative paths by running from the job directory.
+    # In black_bar mode, pad the canvas downward with a black strip and
+    # render the ASS into the padded canvas (subtitles sit in the strip).
+    if subtitle_mode == "black_bar":
+        vf = f"pad=iw:ih+{BAR_HEIGHT}:0:0:black,subtitles=subtitles.ass"
+    else:
+        vf = "subtitles=subtitles.ass"
+
     cmd = [
         "ffmpeg", "-y",
         "-i", "video.mp4",
-        "-vf", "subtitles=subtitles.ass",
+        "-vf", vf,
         "-c:v", "libx264",
         "-preset", FFMPEG_PRESET,
         "-crf", str(FFMPEG_CRF),
