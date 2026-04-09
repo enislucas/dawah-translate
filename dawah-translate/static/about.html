@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>About — Dawah-Translate</title>
+    <title>About — Dawah-Translate V3</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
@@ -136,7 +136,7 @@
 </head>
 <body>
     <nav>
-        <span class="brand">Dawah-Translate</span>
+        <span class="brand">Dawah-Translate <span style="font-size:0.7rem;background:#3b82f6;color:#fff;padding:0.15rem 0.4rem;border-radius:4px;vertical-align:middle;margin-left:0.3rem;">V3</span></span>
         <a href="/">Home</a>
         <a href="/about" class="active">About</a>
         <a href="/architecture">Architecture</a>
@@ -144,7 +144,7 @@
     </nav>
 
     <div class="container">
-        <h1>About Dawah-Translate</h1>
+        <h1>About Dawah-Translate V3</h1>
         <p class="subtitle">
             A self-hosted pipeline that translates Islamic YouTube content into Romanian,
             producing ready-to-upload videos with burned-in subtitles.
@@ -191,7 +191,7 @@
         </div>
 
         <h2>How It Works</h2>
-        <p>The pipeline has 5 main stages:</p>
+        <p>The V3 pipeline has 7 stages, with a human-in-the-loop config step and a 4-stage translation engine:</p>
 
         <div class="timeline">
             <div class="timeline-item done">
@@ -200,19 +200,32 @@
             </div>
             <div class="timeline-item done">
                 <h4>2. Transcribe</h4>
-                <p>Audio is transcribed using OpenAI's Whisper model (running locally via faster-whisper). Supports Arabic, English, Turkish, French, and auto-detection. Produces timestamped SRT subtitles.</p>
+                <p>Audio is transcribed using Whisper (faster-whisper, CPU). Supports Arabic, English, Turkish, French, and auto-detection. Produces timestamped SRT subtitles.</p>
             </div>
             <div class="timeline-item done">
-                <h4>3. Translate</h4>
-                <p>Subtitles are translated to Romanian. Choose between free local translation (NLLB-200, Meta's multilingual model) or Claude API (higher quality, understands Islamic context). Both apply the glossary.</p>
+                <h4>3. Configure</h4>
+                <p>Pipeline pauses. A config screen shows video info, cost estimate per model (Sonnet/Opus with EUR ranges), and subtitle mode selector (black bar default vs overlay).</p>
             </div>
             <div class="timeline-item done">
-                <h4>4. Review</h4>
-                <p>A web UI shows the video alongside the subtitle table. Edit translations inline, check reading speed, re-translate individual segments. The human is in the loop <em>before</em> burning.</p>
+                <h4>4. Translate (4-stage pipeline)</h4>
+                <p>
+                    <strong>Stage 1 — Analysis:</strong> Full-document summary, glossary term detection, transcription error flagging, Romanian title generation.<br>
+                    <strong>Stage 2 — Raw Translation:</strong> Sliding-window translation (50 segments, 15 overlap) with short accuracy-focused prompt.<br>
+                    <strong>Stage 3 — Quality Review:</strong> Polish pass with a separate short prompt for naturalness and diacritics.<br>
+                    <strong>Stage 4 — Validation:</strong> Python-based checks (reading speed, diacritics, glossary compliance) — no LLM cost.
+                </p>
             </div>
             <div class="timeline-item done">
-                <h4>5. Burn & Download</h4>
-                <p>Once approved, FFmpeg burns the subtitles directly into the video as styled text (Noto Sans Bold, white with black outline). Download the final MP4.</p>
+                <h4>5. Review</h4>
+                <p>Full review UI: edit translations inline, edit timestamps with keyboard shortcuts ([/]), per-segment feedback (good/bad), re-translate individual segments, editable Romanian title. Transcription errors highlighted in red.</p>
+            </div>
+            <div class="timeline-item done">
+                <h4>6. Burn</h4>
+                <p>FFmpeg burns subtitles into the video. Black bar mode adds a clean 160px strip below the video so Romanian text never overlaps existing English/Arabic subtitles. Noto Sans Bold with outline.</p>
+            </div>
+            <div class="timeline-item done">
+                <h4>7. Download</h4>
+                <p>Download the final MP4, named with the Romanian title for easy identification.</p>
             </div>
         </div>
 
@@ -225,31 +238,36 @@
                 <tr><td>Web Server</td><td>FastAPI + Uvicorn</td><td>Async Python, background tasks, streaming</td></tr>
                 <tr><td>Video Download</td><td>yt-dlp</td><td>Most reliable YouTube downloader</td></tr>
                 <tr><td>Transcription</td><td>faster-whisper</td><td>CPU-friendly Whisper with int8 quantization</td></tr>
-                <tr><td>Translation (local)</td><td>NLLB-200 via CTranslate2</td><td>Free, offline, ~400 MB model</td></tr>
-                <tr><td>Translation (API)</td><td>Anthropic Claude</td><td>Context-aware, glossary-enforcing AI</td></tr>
+                <tr><td>Translation</td><td>Anthropic Claude (Sonnet/Opus)</td><td>4-stage pipeline: context-aware, glossary-enforcing, quality-reviewed</td></tr>
+                <tr><td>Cost Estimation</td><td>pipeline/estimate.py</td><td>Pre-translation EUR cost estimate per model</td></tr>
                 <tr><td>Video Processing</td><td>FFmpeg</td><td>Industry standard for transcoding + subtitles</td></tr>
                 <tr><td>Subtitle Format</td><td>SRT → ASS</td><td>ASS supports font, outline, positioning</td></tr>
                 <tr><td>Font</td><td>Noto Sans Bold</td><td>Perfect Romanian diacritic support</td></tr>
-                <tr><td>Frontend</td><td>Vanilla HTML/CSS/JS</td><td>No build step, 3 pages total</td></tr>
+                <tr><td>Frontend</td><td>Vanilla HTML/CSS/JS</td><td>No build step, 6 pages (home, config, review, glossary, about, architecture)</td></tr>
             </tbody>
         </table>
 
         <h2>Project Roadmap</h2>
         <div class="card-grid">
             <div class="card">
-                <span class="label complete">COMPLETE</span>
-                <h3>Phase 1: Core Pipeline</h3>
+                <span class="label complete">V1 — COMPLETE</span>
+                <h3>Core Pipeline</h3>
                 <p>Download, transcribe, translate, review, and burn subtitles. Full web UI with job management.</p>
             </div>
             <div class="card">
-                <span class="label next">NEXT</span>
-                <h3>Phase 2: Quality & Polish</h3>
-                <p>Speaker diarization, translation memory, Telegram notifications, batch processing, Google Drive upload.</p>
+                <span class="label complete">V2 — COMPLETE</span>
+                <h3>Quality & Safety</h3>
+                <p>Creedal safety checks, quality scoring, export system (SRT/VTT/TXT/ASS/bilingual), translation memory.</p>
             </div>
             <div class="card">
-                <span class="label future">FUTURE</span>
-                <h3>Phase 3: Scale & Share</h3>
-                <p>Docker deployment, multi-user auth, YouTube direct upload, cloud hosting options.</p>
+                <span class="label complete">V3 — COMPLETE</span>
+                <h3>4-Stage Pipeline & Config</h3>
+                <p>4-stage translation (analysis, translate, review, validate). Cost estimation, config screen, black bar subtitles, timestamp editing, feedback, transcription error detection.</p>
+            </div>
+            <div class="card">
+                <span class="label next">NEXT</span>
+                <h3>Scale & Share</h3>
+                <p>Docker deployment, batch processing, speaker diarization, Telegram notifications, YouTube direct upload.</p>
             </div>
         </div>
 

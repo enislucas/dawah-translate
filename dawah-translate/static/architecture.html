@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Architecture — Dawah-Translate</title>
+    <title>Architecture — Dawah-Translate V3</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
@@ -164,7 +164,7 @@
 </head>
 <body>
     <nav>
-        <span class="brand">Dawah-Translate</span>
+        <span class="brand">Dawah-Translate <span style="font-size:0.7rem;background:#3b82f6;color:#fff;padding:0.15rem 0.4rem;border-radius:4px;vertical-align:middle;margin-left:0.3rem;">V3</span></span>
         <a href="/">Home</a>
         <a href="/about">About</a>
         <a href="/architecture" class="active">Architecture</a>
@@ -175,7 +175,7 @@
         <h1>Technical Architecture</h1>
         <p class="subtitle">How the pipeline is built, what each component does, and how data flows through the system.</p>
 
-        <h2>Pipeline Flow</h2>
+        <h2>Pipeline Flow (V3)</h2>
         <div class="flow">
             <div class="flow-step">
                 <div class="step-name">Download</div>
@@ -189,9 +189,15 @@
                 <div class="step-output">transcript_original.srt</div>
             </div>
             <div class="flow-arrow">&#10132;</div>
-            <div class="flow-step">
-                <div class="step-name">Translate</div>
-                <div class="step-tool">NLLB-200 / Claude</div>
+            <div class="flow-human">
+                <div class="step-name">Configure</div>
+                <div class="step-tool">config.html</div>
+                <div class="step-output">model + subtitle mode</div>
+            </div>
+            <div class="flow-arrow">&#10132;</div>
+            <div class="flow-step active">
+                <div class="step-name">Translate (4-stage)</div>
+                <div class="step-tool">Claude Sonnet/Opus</div>
                 <div class="step-output">transcript_romanian.srt</div>
             </div>
             <div class="flow-arrow">&#10132;</div>
@@ -208,6 +214,33 @@
             </div>
         </div>
 
+        <h3>4-Stage Translation Engine</h3>
+        <div class="flow" style="margin-top:0.5rem;">
+            <div class="flow-step" style="min-width:140px;border-color:#c084fc;">
+                <div class="step-name" style="font-size:0.85rem;">Stage 1: Analysis</div>
+                <div class="step-tool">summary, terms, errors</div>
+                <div class="step-output">0–5%</div>
+            </div>
+            <div class="flow-arrow">&#10132;</div>
+            <div class="flow-step" style="min-width:140px;border-color:#3b82f6;">
+                <div class="step-name" style="font-size:0.85rem;">Stage 2: Translate</div>
+                <div class="step-tool">sliding window (50/15)</div>
+                <div class="step-output">5–55%</div>
+            </div>
+            <div class="flow-arrow">&#10132;</div>
+            <div class="flow-step" style="min-width:140px;border-color:#fbbf24;">
+                <div class="step-name" style="font-size:0.85rem;">Stage 3: Review</div>
+                <div class="step-tool">polish &amp; naturalness</div>
+                <div class="step-output">55–95%</div>
+            </div>
+            <div class="flow-arrow">&#10132;</div>
+            <div class="flow-step" style="min-width:140px;border-color:#22c55e;">
+                <div class="step-name" style="font-size:0.85rem;">Stage 4: Validate</div>
+                <div class="step-tool">Python (no LLM)</div>
+                <div class="step-output">95–100%</div>
+            </div>
+        </div>
+
         <h2>Project Structure</h2>
         <div class="file-tree">
             <span class="dir">dawah-translate/</span><br>
@@ -219,13 +252,14 @@
             ├── <span class="dir">pipeline/</span><br>
             │   ├── <span class="file">download.py</span> <span class="comment">— YouTube download + audio extraction</span><br>
             │   ├── <span class="file">transcribe.py</span> <span class="comment">— Whisper speech-to-text</span><br>
-            │   ├── <span class="file">translate.py</span> <span class="comment">— Claude API translation</span><br>
-            │   ├── <span class="file">translate_local.py</span> <span class="comment">— NLLB-200 local translation</span><br>
-            │   ├── <span class="file">subtitle.py</span> <span class="comment">— SRT/ASS parsing, normalization</span><br>
-            │   └── <span class="file">burn.py</span> <span class="comment">— FFmpeg subtitle burning</span><br>
+            │   ├── <span class="file">translate.py</span> <span class="comment">— 4-stage Claude translation pipeline</span><br>
+            │   ├── <span class="file">estimate.py</span> <span class="comment">— Token/cost estimation per model</span><br>
+            │   ├── <span class="file">subtitle.py</span> <span class="comment">— SRT/ASS parsing, normalization, adaptive font</span><br>
+            │   └── <span class="file">burn.py</span> <span class="comment">— FFmpeg subtitle burning (black bar + overlay)</span><br>
             ├── <span class="dir">static/</span><br>
             │   ├── <span class="file">index.html</span> <span class="comment">— Job submission + list</span><br>
-            │   ├── <span class="file">review.html</span> <span class="comment">— Subtitle review UI</span><br>
+            │   ├── <span class="file">config.html</span> <span class="comment">— Model &amp; subtitle mode config screen</span><br>
+            │   ├── <span class="file">review.html</span> <span class="comment">— Subtitle review UI (timestamps, feedback)</span><br>
             │   ├── <span class="file">glossary.html</span> <span class="comment">— Glossary editor</span><br>
             │   ├── <span class="file">about.html</span> <span class="comment">— Project documentation</span><br>
             │   └── <span class="file">architecture.html</span> <span class="comment">— This page</span><br>
@@ -276,34 +310,33 @@
             </div>
 
             <div class="component">
-                <h3>Translate (Claude API)</h3>
+                <h3>Translate (4-Stage Pipeline)</h3>
                 <div class="file">pipeline/translate.py</div>
-                <p>Context-aware translation using Claude with glossary enforcement.</p>
+                <p>4-stage Claude translation with glossary enforcement and quality review.</p>
                 <span class="tag tool">Anthropic SDK</span>
                 <ul>
-                    <li>Batch size: 50 segments per API call</li>
-                    <li>Context: 5 previous segments per batch</li>
-                    <li>Tracks introduced glossary terms</li>
-                    <li>Character limits per segment duration</li>
+                    <li>Stage 1: Full-document analysis, term detection, error flagging</li>
+                    <li>Stage 2: Sliding-window translation (50 segments, 15 overlap)</li>
+                    <li>Stage 3: Quality review pass (naturalness, diacritics)</li>
+                    <li>Stage 4: Python validation (reading speed, glossary compliance)</li>
+                    <li>Models: Sonnet (fast, cheap) or Opus (difficult content)</li>
                 </ul>
                 <span class="tag input">transcript_original.srt</span>
                 <span class="tag output">transcript_romanian.srt</span>
             </div>
 
             <div class="component">
-                <h3>Translate (NLLB Local)</h3>
-                <div class="file">pipeline/translate_local.py</div>
-                <p>Free local translation using Meta's NLLB-200 model.</p>
-                <span class="tag tool">CTranslate2</span>
-                <span class="tag tool">HuggingFace</span>
+                <h3>Cost Estimation</h3>
+                <div class="file">pipeline/estimate.py</div>
+                <p>Pre-translation cost estimate shown on the config screen.</p>
                 <ul>
-                    <li>Model: nllb-200-distilled-600M (~400 MB)</li>
-                    <li>Supports: Arabic, English, Turkish, French</li>
-                    <li>Glossary post-processing for Islamic terms</li>
-                    <li>Known-pattern replacement table</li>
+                    <li>Language-specific chars-per-token ratios (ar=2.5, en=4.0)</li>
+                    <li>Accounts for all 3 Claude stages + prompt overhead</li>
+                    <li>Returns EUR low/mid/high range per model</li>
+                    <li>USD→EUR conversion (×0.92)</li>
                 </ul>
                 <span class="tag input">transcript_original.srt</span>
-                <span class="tag output">transcript_romanian.srt</span>
+                <span class="tag output">pricing JSON</span>
             </div>
 
             <div class="component">
@@ -321,15 +354,16 @@
             <div class="component">
                 <h3>Burn Subtitles</h3>
                 <div class="file">pipeline/burn.py</div>
-                <p>Burns styled subtitles into the video using FFmpeg.</p>
+                <p>Burns styled subtitles into the video using FFmpeg. Supports black bar and overlay modes.</p>
                 <span class="tag tool">FFmpeg</span>
                 <ul>
+                    <li>Black bar mode: <code>pad=iw:ih+160:0:0:black</code> adds clean strip below video</li>
+                    <li>Overlay mode: subtitles directly on video</li>
+                    <li>Adaptive font sizing for long segments</li>
                     <li>Codec: libx264, preset medium, CRF 20</li>
-                    <li>Font: Noto Sans Bold 56pt</li>
-                    <li>Style: white text, black outline + shadow</li>
                     <li>Audio: copied (not re-encoded)</li>
                 </ul>
-                <span class="tag input">video.mp4 + romanian.srt</span>
+                <span class="tag input">video.mp4 + subtitles.ass</span>
                 <span class="tag output">final.mp4</span>
             </div>
         </div>
@@ -341,21 +375,31 @@
             </thead>
             <tbody>
                 <tr><td><code>GET</code></td><td><code>/</code></td><td>Home page (job submission form)</td></tr>
+                <tr><td><code>GET</code></td><td><code>/config/{job_id}</code></td><td>Model &amp; subtitle mode config screen</td></tr>
                 <tr><td><code>GET</code></td><td><code>/review/{job_id}</code></td><td>Subtitle review page</td></tr>
                 <tr><td><code>GET</code></td><td><code>/glossary</code></td><td>Glossary editor page</td></tr>
                 <tr><td><code>GET</code></td><td><code>/about</code></td><td>Project documentation</td></tr>
                 <tr><td><code>GET</code></td><td><code>/architecture</code></td><td>Architecture diagrams (this page)</td></tr>
                 <tr><td colspan="3" style="padding: 0.3rem; background: #0f172a;"></td></tr>
-                <tr><td><code>POST</code></td><td><code>/api/submit</code></td><td>Submit a new translation job</td></tr>
+                <tr><td><code>POST</code></td><td><code>/api/submit</code></td><td>Submit a new job (download + transcribe only)</td></tr>
+                <tr><td><code>GET</code></td><td><code>/api/job/{id}/estimate</code></td><td>Get cost estimate per model (V3)</td></tr>
+                <tr><td><code>POST</code></td><td><code>/api/job/{id}/start-translation</code></td><td>Start translation with chosen model + mode (V3)</td></tr>
                 <tr><td><code>GET</code></td><td><code>/api/status/{job_id}</code></td><td>Get job status and progress</td></tr>
+                <tr><td><code>GET</code></td><td><code>/api/jobs/{job_id}/progress</code></td><td>SSE progress stream</td></tr>
                 <tr><td><code>GET</code></td><td><code>/api/jobs</code></td><td>List all jobs</td></tr>
                 <tr><td><code>POST</code></td><td><code>/api/retry/{job_id}</code></td><td>Retry a failed job</td></tr>
                 <tr><td><code>GET</code></td><td><code>/api/job/{id}/video</code></td><td>Stream video (Range support)</td></tr>
-                <tr><td><code>GET</code></td><td><code>/api/job/{id}/srt</code></td><td>Get subtitles as JSON</td></tr>
-                <tr><td><code>POST</code></td><td><code>/api/job/{id}/srt</code></td><td>Save edited subtitles</td></tr>
+                <tr><td><code>GET</code></td><td><code>/api/job/{id}/srt</code></td><td>Get subtitles as JSON (with quality, feedback, errors)</td></tr>
+                <tr><td><code>POST</code></td><td><code>/api/job/{id}/srt</code></td><td>Save edited subtitles (tracks manually_edited)</td></tr>
+                <tr><td><code>POST</code></td><td><code>/api/job/{id}/update-segment</code></td><td>Update single segment text/timestamps (V3)</td></tr>
+                <tr><td><code>POST</code></td><td><code>/api/job/{id}/feedback</code></td><td>Submit per-segment feedback (V3)</td></tr>
+                <tr><td><code>POST</code></td><td><code>/api/job/{id}/title</code></td><td>Update Romanian title for export (V3)</td></tr>
                 <tr><td><code>POST</code></td><td><code>/api/job/{id}/retranslate</code></td><td>Re-translate a single segment</td></tr>
                 <tr><td><code>POST</code></td><td><code>/api/job/{id}/burn</code></td><td>Start subtitle burning</td></tr>
-                <tr><td><code>GET</code></td><td><code>/api/job/{id}/download</code></td><td>Download final MP4</td></tr>
+                <tr><td><code>GET</code></td><td><code>/api/job/{id}/download</code></td><td>Download final MP4 (Romanian title filename)</td></tr>
+                <tr><td><code>GET</code></td><td><code>/api/job/{id}/quality</code></td><td>Get quality report</td></tr>
+                <tr><td><code>POST</code></td><td><code>/api/job/{id}/quality/refresh</code></td><td>Re-run quality checks</td></tr>
+                <tr><td><code>GET</code></td><td><code>/api/job/{id}/export/{fmt}</code></td><td>Export subtitles (srt, vtt, txt, ass, bilingual)</td></tr>
                 <tr><td><code>GET</code></td><td><code>/api/glossary</code></td><td>Get glossary JSON</td></tr>
                 <tr><td><code>POST</code></td><td><code>/api/glossary</code></td><td>Save glossary JSON</td></tr>
             </tbody>
@@ -371,8 +415,8 @@
                 <tr><td><code>MAX_LINES_PER_BLOCK</code></td><td>2</td><td>Max lines per subtitle block</td></tr>
                 <tr><td><code>MAX_READING_SPEED</code></td><td>21 cps</td><td>Chars/sec threshold for "too fast"</td></tr>
                 <tr><td><code>MIN_DISPLAY_DURATION</code></td><td>1.0s</td><td>Minimum subtitle display time</td></tr>
-                <tr><td><code>TRANSLATION_BATCH_SIZE</code></td><td>50</td><td>Segments per Claude API call</td></tr>
-                <tr><td><code>TRANSLATION_CONTEXT_SIZE</code></td><td>5</td><td>Previous segments as context</td></tr>
+                <tr><td><code>WINDOW_SIZE</code></td><td>50</td><td>Segments per Claude API call</td></tr>
+                <tr><td><code>WINDOW_OVERLAP</code></td><td>15</td><td>Overlapping segments between windows</td></tr>
                 <tr><td><code>FFMPEG_PRESET</code></td><td>"medium"</td><td>Encoding speed/quality balance</td></tr>
                 <tr><td><code>FFMPEG_CRF</code></td><td>20</td><td>Quality (lower = better, bigger file)</td></tr>
                 <tr><td><code>JOB_MAX_AGE_DAYS</code></td><td>7</td><td>Auto-delete jobs older than this</td></tr>
@@ -381,27 +425,28 @@
         </table>
 
         <h2>Glossary System</h2>
-        <p>The glossary is the key innovation for handling Islamic terminology in translation. Here's how it works in each translation path:</p>
+        <p>The glossary is the key innovation for handling Islamic terminology. It is embedded in Claude's system prompt across all translation stages:</p>
 
         <div class="component-grid">
             <div class="component" style="border-top-color: #c084fc;">
-                <h3>Claude API Path</h3>
-                <p>The glossary is embedded directly in Claude's system prompt. Claude reads the rules and applies them contextually:</p>
+                <h3>How It Works</h3>
+                <p>The glossary is passed to Claude in Stage 1 (analysis) and Stage 2 (translation). Claude reads the rules and applies them contextually:</p>
                 <ul>
                     <li>First occurrence of "صلاة" → "Salah (rugaciunea rituala)"</li>
-                    <li>Subsequent occurrences → "Salah"</li>
-                    <li>Tracks introduced terms across batches</li>
-                    <li>Respects character limits</li>
+                    <li>Subsequent occurrences → "Salah" (no parenthetical repeat)</li>
+                    <li>Stage 1 detects which terms appear in the source</li>
+                    <li>Stage 2 tracks introduced terms across sliding windows</li>
+                    <li>Stage 4 validates glossary compliance in Python</li>
                 </ul>
             </div>
             <div class="component" style="border-top-color: #fbbf24;">
-                <h3>NLLB Local Path</h3>
-                <p>NLLB can't be prompted, so glossary is applied as post-processing:</p>
+                <h3>Creedal Safety</h3>
+                <p>The translation prompts enforce Ahl as-Sunnah wal-Jama'ah terminology:</p>
                 <ul>
-                    <li>NLLB translates "صلاة" → "rugaciune"</li>
-                    <li>Post-processor detects "rugaciune" in output</li>
-                    <li>Replaces with "Salah (rugaciunea rituala)"</li>
-                    <li>Uses a known-pattern table for each Arabic term</li>
+                    <li>Never translate Allah as "Dumnezeu" — always "Allah"</li>
+                    <li>Preserve transliterations: Tawheed, Shirk, Sunnah</li>
+                    <li>Quality report flags creedal issues as critical</li>
+                    <li>Review UI highlights critical segments in red</li>
                 </ul>
             </div>
         </div>
