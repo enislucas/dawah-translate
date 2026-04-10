@@ -336,10 +336,11 @@
     "rule": "Salawat formula. صلاة here = divine blessing, NOT ritual prayer. Always: 'Binecuvântarea și pacea fie asupra...'."
   },
   "صلى الله عليه وسلم": {
-    "transliteration": "sallallahu alayhi wa sallam",
+    "transliteration": "ﷺ",
     "ro_explanation": "pacea și binecuvântarea lui Allah fie asupra sa",
     "category": "expressions",
-    "rule": "Blessing upon the Prophet. Keep transliterated or use Romanian equivalent. Never drop it."
+    "display": "ﷺ",
+    "rule": "Blessing upon the Prophet. Use the ﷺ symbol. First occurrence may add '(pacea și binecuvântarea lui Allah fie asupra sa)'. Never drop it."
   },
   "رضي الله عنه": {
     "transliteration": "radiallahu anhu",
@@ -508,5 +509,23 @@
     "ro_explanation": "diavolul",
     "category": "aqeedah",
     "rule": "Can use 'Shaytan' or 'diavolul'. Iblis = name of the chief shaytan."
+  },
+  "الحمد لله رب العالمين": {
+    "transliteration": "Alhamdulillahi Rabbil Alameen",
+    "ro_explanation": "slavă lui Allah, Stăpânul lumilor",
+    "category": "expressions",
+    "rule": "First occurrence: 'Alhamdulillahi Rabbil Alameen (slavă lui Allah, Stăpânul lumilor)'. After: just 'Alhamdulillahi Rabbil Alameen'."
+  },
+  "لا حول ولا قوة إلا بالله": {
+    "transliteration": "La hawla wa la quwwata illa billah",
+    "ro_explanation": "Nu există putere și nici tărie decât prin Allah",
+    "category": "expressions",
+    "rule": "First occurrence with explanation. After: just transliteration."
+  },
+  "جزاكم الله خيرا": {
+    "transliteration": "JazakumAllahu khairan",
+    "ro_explanation": "Allah să vă răsplătească cu bine",
+    "category": "expressions",
+    "rule": "Plural form of jazakAllahu khairan. First occurrence with explanation."
   }
 }

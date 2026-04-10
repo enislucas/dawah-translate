@@ -19,6 +19,7 @@ import logging
 import math
 import re
 import time
+import asyncio
 import argparse
 from pathlib import Path
 
@@ -34,7 +35,7 @@ from config import (
 )
 from pipeline.subtitle import (
     parse_srt, write_srt, normalize_romanian,
-    check_reading_speed, resegment,
+    check_reading_speed, resegment, merge_micro_segments,
 )
 
 logger = logging.getLogger("dawah.translate")
@@ -226,6 +227,27 @@ RULES — your only job is ACCURACY:
 
 7. NO CONTENT LOSS: every proper name, place, date, and number in the source must appear somewhere in the translation. If "يوم خيبر" is in the source, "Khaybar" must be in your output.
 
+8. ISLAMIC FORMULA DETECTION: When Whisper transcribes Arabic formulas as English transliteration (e.g., "Bismillah ar-Rahman ar-Rahim", "Alhamdulillahi Rabbil Alameen", "SubhanAllah", "Allahu Akbar", "La hawla wa la quwwata illa billah", "JazakAllahu khairan"), recognize these as known Islamic formulas and translate according to the glossary rules:
+   First occurrence: Transliteration (Explicație română)
+   Example: "Bismillah ir-Rahman ir-Rahim (În numele lui Allah, Cel Milostiv, Cel Îndurător)"
+   Subsequent occurrences: Just transliteration
+   Example: "Bismillah ir-Rahman ir-Rahim"
+   NEVER leave these as raw English transliteration without at least the standard transliteration form.
+
+9. SALAWAT / ﷺ SYMBOL: When the speaker says ANY of these variations, render it as the ﷺ symbol in Romanian output:
+   - "sallallahu alayhi wa sallam", "sallallahu alaihi wasallam", "sala Allahu alayhi wa sallam"
+   - "peace be upon him", "PBUH", "peace and blessings be upon him"
+   - "صلى الله عليه وسلم", "عليه الصلاة والسلام"
+   Do NOT transliterate it as "sallallahu alayhi wa sallam" and do NOT translate it as "pacea fie asupra lui" every time — just use the ﷺ symbol.
+   Example: "The Prophet ﷺ said..." → "Profetul ﷺ a spus..."
+
+10. QURAN VERSE HANDLING: When the speaker directly quotes a Quran verse in Arabic:
+   - If you KNOW the exact surah and ayah (you are certain), tag it: {{index}}|[QURAN:{{surah}}:{{ayah}}] {{arabic_text}} — {{romanian_translation}}
+   - If you recognize it as Quran but aren't sure of the exact reference, still translate the MEANING into Romanian. Just don't add the [QURAN:X:Y] tag.
+   - NEVER leave a Quran quote as English transliteration — always provide the Romanian meaning.
+   When the speaker PARAPHRASES Quran in English (e.g., "Allah says in the Quran that..."), just translate normally into Romanian. No tag needed.
+   It is BETTER to tag a verse you're certain about than to tag nothing. Only skip the tag when you're genuinely unsure of the reference.
+
 OUTPUT FORMAT (one segment per line, nothing else):
 {{index}}|{{romanian translation}}
 
@@ -273,6 +295,204 @@ def _parse_window_response(response_text: str) -> dict:
     return translations
 
 
+def is_likely_romanian(text: str) -> bool:
+    """Quick check: Romanian text should contain diacritics or common Romanian words.
+
+    Strips ~ prefix before checking. Skips segments under 10 visible chars.
+    """
+    clean = text.lstrip('~').strip()
+    if len(clean) < 10:
+        return True  # Single words — too short to detect reliably
+    romanian_indicators = [
+        'și', 'că', 'este', 'sunt', 'pentru', 'care', 'acest', 'aceasta',
+        'din', 'sau', 'dar', 'mai', 'cum', 'când', 'unde', 'cine',
+        'deci', 'apoi', 'între', 'prin', 'către', 'despre', 'peste',
+        'lui', 'cele', 'doar', 'astfel',
+    ]
+    text_lower = clean.lower()
+    matches = sum(1 for word in romanian_indicators if word in text_lower)
+    if matches >= 2 or any(c in clean for c in 'șțăîâ'):
+        return True
+    # If it looks English, it's definitely not Romanian
+    if _is_likely_english(clean):
+        return False
+    # Ambiguous — could be short Romanian without diacritics. Give benefit of doubt
+    # only for shorter texts (under 40 chars). Longer texts should have indicators.
+    return len(clean) < 40
+
+
+def _is_likely_english(text: str) -> bool:
+    """Detect English text that should never appear in Romanian output."""
+    english_indicators = [
+        'the ', 'and ', 'this ', 'that ', 'you ', 'they ',
+        'with ', 'from ', 'because ', 'which ', 'have ',
+        'what ', 'about ', 'when ', 'there ', 'their ',
+        'would ', 'should ', 'could ', 'being ', "you're ",
+        "don't ", "isn't ", "it's ", 'longer ',
+    ]
+    text_lower = text.lower()
+    matches = sum(1 for word in english_indicators if word in text_lower)
+    return matches >= 3
+
+
+def _count_translated(window_translations: dict, active_segments: list[dict]) -> int:
+    """Count how many active segments got a valid translation."""
+    count = 0
+    for seg in active_segments:
+        if seg["index"] in window_translations:
+            text = window_translations[seg["index"]]
+            if text and len(text.strip()) > 0:
+                count += 1
+    return count
+
+
+def _translate_window_with_retry(client, model_id: str, system_prompt: str,
+                                 segments: list[dict], context: list[dict],
+                                 lookahead: list[dict],
+                                 glossary: dict, introduced_terms: set,
+                                 translated: list[dict], offset: int,
+                                 win_label: str = "") -> None:
+    """Translate a window with automatic retry on failure.
+
+    On failure (< 80% segments translated), retries with two half-windows.
+    On double failure, falls back to micro-windows of 10 segments.
+
+    Mutates `translated` in place and updates `introduced_terms`.
+    """
+    window_size = len(segments)
+
+    def _apply_translations(trans_dict: dict, active: list[dict], base_offset: int):
+        """Apply a translation dict to the translated list."""
+        for seg in active:
+            idx = seg["index"]
+            if idx in trans_dict:
+                text = normalize_romanian(trans_dict[idx])
+                # Check for untranslated text (still in source language)
+                if len(text) > 20 and not is_likely_romanian(text):
+                    logger.warning("Seg %d appears untranslated (not Romanian): %.60s", idx, text)
+                translated[base_offset + (idx - active[0]["index"])]["text"] = text
+                # Track glossary introductions
+                for arabic, info in glossary.items():
+                    trans = info["transliteration"]
+                    if trans.lower() in text.lower():
+                        introduced_terms.add(trans)
+            else:
+                translated[base_offset + (idx - active[0]["index"])]["text"] = f"~{seg['text']}"
+                logger.warning("Segment %d not in response", idx)
+
+    # ── Attempt 1: full window ──────────────────────────────────────
+    user_message = _build_step2_user_message(context, segments, lookahead)
+    response_text, stop_reason, in_tokens, out_tokens = _call_claude(
+        client, model_id, system_prompt, user_message,
+        max_tokens=8192, return_metadata=True,
+    )
+    window_translations = _parse_window_response(response_text)
+    translated_count = _count_translated(window_translations, segments)
+
+    if translated_count >= window_size * 0.8:
+        # Success — apply and return
+        _apply_translations(window_translations, segments, offset)
+        logger.info("%s: %d/%d segments translated (stop=%s, in=%d, out=%d)",
+                    win_label, translated_count, window_size,
+                    stop_reason, in_tokens, out_tokens)
+        return
+
+    # ── Diagnostic logging for failed window ────────────────────────
+    logger.warning(
+        "%s FAILED: only %d/%d segments parsed. stop_reason=%s, "
+        "tokens_in=%d, tokens_out=%d",
+        win_label, translated_count, window_size,
+        stop_reason, in_tokens, out_tokens,
+    )
+    logger.warning("Raw response (first 500 chars): %.500s", response_text)
+
+    # ── Attempt 2: split into two halves ────────────────────────────
+    mid = window_size // 2
+    first_half = segments[:mid]
+    second_half = segments[mid:]
+
+    logger.info("%s: Retrying as two half-windows (%d + %d segments)",
+                win_label, mid, window_size - mid)
+
+    time.sleep(2)  # Rate limit protection
+
+    # First half: context = original context, lookahead = start of second half
+    user_a = _build_step2_user_message(context, first_half, segments[mid:mid + 10])
+    resp_a, stop_a, in_a, out_a = _call_claude(
+        client, model_id, system_prompt, user_a,
+        max_tokens=8192, return_metadata=True,
+    )
+    trans_a = _parse_window_response(resp_a)
+    count_a = _count_translated(trans_a, first_half)
+
+    time.sleep(2)
+
+    # Second half: context = end of first half (translated), lookahead = original lookahead
+    # Use the first-half translations as context if available
+    half_context = []
+    for seg in first_half[-10:]:
+        idx = seg["index"]
+        if idx in trans_a:
+            half_context.append({"index": idx, "text": trans_a[idx]})
+        else:
+            half_context.append(seg)
+
+    user_b = _build_step2_user_message(half_context, second_half, lookahead[:10])
+    resp_b, stop_b, in_b, out_b = _call_claude(
+        client, model_id, system_prompt, user_b,
+        max_tokens=8192, return_metadata=True,
+    )
+    trans_b = _parse_window_response(resp_b)
+    count_b = _count_translated(trans_b, second_half)
+
+    total_retry = count_a + count_b
+    logger.info("%s half-retry: %d+%d = %d/%d (stop=%s/%s)",
+                win_label, count_a, count_b, total_retry, window_size,
+                stop_a, stop_b)
+
+    if total_retry >= window_size * 0.8:
+        # Apply both halves
+        _apply_translations(trans_a, first_half, offset)
+        _apply_translations(trans_b, second_half, offset + mid)
+        return
+
+    # ── Attempt 3: micro-windows of 10 segments ────────────────────
+    logger.warning("%s: Half-windows also failed (%d/%d). "
+                   "Falling back to micro-windows of 10.",
+                   win_label, total_retry, window_size)
+
+    for i in range(0, window_size, 10):
+        micro_batch = segments[i:i + 10]
+        # Context: 5 segments before this micro-batch
+        if i > 0:
+            ctx = segments[max(0, i - 5):i]
+            # Try to use already-translated text for context
+            micro_ctx = []
+            for seg in ctx:
+                t_idx = offset + (seg["index"] - segments[0]["index"])
+                micro_ctx.append(translated[t_idx])
+        else:
+            micro_ctx = context[-5:] if context else []
+
+        # Lookahead: 5 segments after this micro-batch
+        if i + 10 < window_size:
+            micro_look = segments[i + 10:i + 15]
+        else:
+            micro_look = lookahead[:5]
+
+        time.sleep(1)  # Rate limit
+
+        user_m = _build_step2_user_message(micro_ctx, micro_batch, micro_look)
+        resp_m = _call_claude(client, model_id, system_prompt, user_m, max_tokens=4096)
+        trans_m = _parse_window_response(resp_m)
+
+        micro_count = _count_translated(trans_m, micro_batch)
+        logger.info("%s micro %d-%d: %d/%d segments",
+                    win_label, i, i + len(micro_batch), micro_count, len(micro_batch))
+
+        _apply_translations(trans_m, micro_batch, offset + i)
+
+
 def run_step2_translation(client, model_id: str, segments: list[dict],
                           source_language: str, glossary: dict, summary: dict,
                           progress_cb=None) -> list[dict]:
@@ -295,6 +515,10 @@ def run_step2_translation(client, model_id: str, segments: list[dict],
     introduced_terms = set()
 
     for win_idx in range(num_windows):
+        # Inter-window delay to prevent 429 rate limiting (Tier 2: 90K output tokens/min)
+        if win_idx > 0:
+            time.sleep(2)
+
         start = win_idx * window_size
         end = min(start + window_size, len(segments))
         active = segments[start:end]
@@ -314,30 +538,14 @@ def run_step2_translation(client, model_id: str, segments: list[dict],
         if progress_cb:
             progress_cb("translate", pct, msg)
 
-        user_message = _build_step2_user_message(context, active, lookahead)
-
-        response_text = _call_claude(client, model_id, system_prompt, user_message,
-                                     max_tokens=8192)
-        window_translations = _parse_window_response(response_text)
-
-        # Apply translations to our result list
-        for seg in active:
-            idx = seg["index"]
-            if idx in window_translations:
-                text = normalize_romanian(window_translations[idx])
-                translated[start + (idx - active[0]["index"])]["text"] = text
-
-                # Track glossary introductions
-                for arabic, info in glossary.items():
-                    trans = info["transliteration"]
-                    if trans.lower() in text.lower():
-                        introduced_terms.add(trans)
-            else:
-                # Parser fallback — segment missing from API response. Mark with ~
-                # so the Layer 2 reviewer (Pass 0) will catch it and produce a
-                # real Romanian translation. Never leave a flag-only segment.
-                translated[start + (idx - active[0]["index"])]["text"] = f"~{seg['text']}"
-                logger.warning("Segment %d not in response", idx)
+        win_label = f"Window {win_idx + 1}/{num_windows}"
+        _translate_window_with_retry(
+            client, model_id, system_prompt,
+            active, context, lookahead,
+            glossary, introduced_terms,
+            translated, start,
+            win_label=win_label,
+        )
 
     if progress_cb:
         progress_cb("translate", 60, "Stage 2/4 complete. Starting quality review...")
@@ -362,11 +570,13 @@ FIX THESE PATTERNS:
 6. Arabic verbal nouns: "evitarea lui" → "a evita acest lucru".
 7. Singular/plural: if the speaker is talking about himself (eu), keep singular — never inflate to "noi"/"noastră".
 
+8. English transliteration of Arabic: if you see Arabic transliteration in Latin script (e.g., "fatawakkal ala Allah", "innahu alhaqqun", "wa quli alhaqqu min rabbikum", "innaka ala alhaqqil mubeen") that has NOT been translated into Romanian, translate the MEANING into Romanian. A Romanian viewer cannot read Latin-script Arabic — replace it with the Romanian meaning. Also: any remaining English text (e.g., "you have home you're no longer...") must be translated into Romanian — English should never appear in the final output.
+
 DO NOT change:
 - Theological terms or glossary words
 - The MEANING of any segment
 - Proper nouns and names (people, places, books)
-- Quran/hadith/du'a quotes — these were already translated correctly in Stage 2
+- Quran/hadith/du'a quotes that are already correctly translated into Romanian
 - Diacritics that are already correct
 
 OUTPUT FORMAT (one segment per line):
@@ -563,8 +773,16 @@ def validate_subtitles(segments: list[dict]) -> tuple[list[dict], list[str]]:
 
 def _call_claude(client, model_id: str, system_prompt: str, user_message: str,
                  max_tokens: int = 4096,
-                 max_retries: int = TRANSLATION_MAX_RETRIES) -> str:
-    """Call Claude API with retries and exponential backoff. Returns response text."""
+                 max_retries: int = TRANSLATION_MAX_RETRIES,
+                 return_metadata: bool = False) -> str | tuple:
+    """Call Claude API with retries and exponential backoff.
+
+    Args:
+        return_metadata: If True, returns (text, stop_reason, input_tokens, output_tokens)
+                         instead of just text.
+
+    Returns response text, or tuple with metadata if return_metadata=True.
+    """
     for attempt in range(max_retries):
         try:
             response = client.messages.create(
@@ -573,7 +791,15 @@ def _call_claude(client, model_id: str, system_prompt: str, user_message: str,
                 system=system_prompt,
                 messages=[{"role": "user", "content": user_message}],
             )
-            return response.content[0].text
+            text = response.content[0].text
+            if return_metadata:
+                return (
+                    text,
+                    response.stop_reason,
+                    response.usage.input_tokens,
+                    response.usage.output_tokens,
+                )
+            return text
         except Exception as e:
             wait_time = 2 ** attempt * 5  # 5s, 10s, 20s
             logger.error("API error (attempt %d/%d): %s", attempt + 1, max_retries, e)
@@ -762,6 +988,13 @@ def run_translation(job_id: str, claude_model: str = None,
         progress_cb("translate", 95, "Stage 4/4: Validating subtitles...")
 
     translated_segments, validation_warnings = validate_subtitles(translated_segments)
+
+    # Merge micro-segments AFTER translation+validation so we work on Romanian text lengths
+    pre_merge = len(translated_segments)
+    translated_segments = merge_micro_segments(translated_segments)
+    if len(translated_segments) != pre_merge:
+        logger.info("Micro-segment merge: %d -> %d segments", pre_merge, len(translated_segments))
+
     write_srt(translated_segments, srt_romanian)
 
     if validation_warnings:

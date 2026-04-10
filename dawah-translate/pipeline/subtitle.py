@@ -8,6 +8,8 @@ Functions:
     check_reading_speed(segment) → chars/sec
     compute_max_chars(segment) → max chars for duration at 21 chars/sec
     resegment(segments) → split long segments to fit subtitle constraints
+    should_merge_segments(a, b) → True if two micro-segments should be merged
+    merge_micro_segments(segments) → merge adjacent short segments
     srt_to_ass(srt_path, ass_path, font_dir) → convert SRT to ASS with style
 """
 
@@ -143,6 +145,76 @@ def compute_max_chars(segment: dict, max_cps: int = 21) -> int:
     """
     duration = segment["end"] - segment["start"]
     return int(duration * max_cps)
+
+
+# ── Micro-segment merging ────────────────────────────────────────────
+
+def _is_short_segment(seg: dict, max_chars: int = 10, max_dur: float = 2.0) -> bool:
+    """Check if a segment is too short to stand alone as a subtitle."""
+    char_count = len(seg['text'].replace('\n', '').replace('\\N', ''))
+    duration = seg['end'] - seg['start']
+    # Very few characters — always short
+    if char_count < max_chars:
+        return True
+    # Short duration
+    return duration < max_dur
+
+
+def should_merge_segments(seg_a: dict, seg_b: dict) -> bool:
+    """Decide if two adjacent segments should be merged.
+
+    At least one segment must be "short" (< 10 chars or < 2.0 seconds).
+    The combined result must fit subtitle constraints (84 chars, 21 cps).
+    """
+    combined_text = seg_a['text'] + ' ' + seg_b['text']
+    combined_chars = len(combined_text.replace('\n', '').replace('\\N', ''))
+    combined_duration = seg_b['end'] - seg_a['start']
+
+    # Hard limits — never violate these
+    if combined_chars > 84:
+        return False
+    if combined_duration > 0 and combined_chars / combined_duration > 21:
+        return False
+
+    # At least one must be short to justify merging
+    return _is_short_segment(seg_a) or _is_short_segment(seg_b)
+
+
+def merge_micro_segments(segments: list[dict]) -> list[dict]:
+    """Merge adjacent micro-segments that are too short to read comfortably.
+
+    Loops until no more merges are possible. Each pass merges adjacent pairs
+    where at least one is short. Multi-pass handles chains of 3+ fragments.
+    """
+    if len(segments) < 2:
+        return segments
+
+    changed = True
+    while changed:
+        changed = False
+        result = []
+        i = 0
+        while i < len(segments):
+            if i + 1 < len(segments) and should_merge_segments(segments[i], segments[i + 1]):
+                merged = {
+                    "index": 0,
+                    "start": segments[i]["start"],
+                    "end": segments[i + 1]["end"],
+                    "text": segments[i]["text"] + ' ' + segments[i + 1]["text"],
+                }
+                result.append(merged)
+                i += 2
+                changed = True
+            else:
+                result.append(segments[i])
+                i += 1
+        segments = result
+
+    # Renumber
+    for idx, seg in enumerate(segments, 1):
+        seg["index"] = idx
+
+    return segments
 
 
 # ── Resegmentation ───────────────────────────────────────────────────
@@ -301,6 +373,56 @@ def _adaptive_font_size(text: str, default_size: int = DEFAULT_ASS_FONT_SIZE) ->
     return None
 
 
+_QURAN_TAG_RE = re.compile(
+    r'\[QURAN:([^]]+)\]\s*(.+?)\s*—\s*(.+)',
+    re.DOTALL,
+)
+
+
+def _has_arabic_script(text: str) -> bool:
+    """Check if text contains Arabic script characters (U+0600–U+06FF, U+0750–U+077F)."""
+    return any('\u0600' <= c <= '\u06FF' or '\u0750' <= c <= '\u077F' for c in text)
+
+
+def _format_quran_ass(text: str, default_size: int = DEFAULT_ASS_FONT_SIZE) -> str | None:
+    """If text contains a [QURAN:...] tag, format it for ASS rendering.
+
+    - If the tag has actual Arabic script: render Arabic in Amiri font on one line,
+      Romanian translation below, and reference in smaller text.
+    - If the tag has Latin transliteration instead of Arabic: render only the
+      Romanian translation (transliteration is useless to Romanian viewers).
+
+    Returns formatted ASS text, or None if no Quran tag found.
+    """
+    match = _QURAN_TAG_RE.search(text)
+    if not match:
+        return None
+
+    ref = match.group(1)       # e.g. "12:108" or "?:?"
+    arabic_or_translit = match.group(2).strip()
+    romanian = match.group(3).strip()
+
+    ref_display = f"[{ref}]" if ref != "?:?" else ""
+
+    arabic_size = int(default_size * 0.85)
+    romanian_size = int(default_size * 0.70)
+    ref_size = int(default_size * 0.55)
+
+    if _has_arabic_script(arabic_or_translit):
+        # Real Arabic script — render dual-line with Amiri font
+        parts = [f"{{\\fnAmiri\\fs{arabic_size}}}{arabic_or_translit}{{\\r}}"]
+        parts.append(f"\\N{{\\fs{romanian_size}}}{romanian}")
+        if ref_display:
+            parts.append(f" {{\\fs{ref_size}}}{ref_display}")
+        return "".join(parts)
+    else:
+        # Latin transliteration — just show Romanian translation + reference
+        parts = [romanian]
+        if ref_display:
+            parts.append(f" {{\\fs{ref_size}}}{ref_display}")
+        return "".join(parts)
+
+
 def srt_to_ass(srt_path: str | Path, ass_path: str | Path,
                font_dir: str | Path = None,
                extra_height: int = 0) -> None:
@@ -308,6 +430,9 @@ def srt_to_ass(srt_path: str | Path, ass_path: str | Path,
     Convert an SRT file to ASS format with the dawah-translate subtitle style.
     Long segments (>84 visible chars) get a smaller font via inline {\\fs} tags
     so they don't overflow the screen edge.
+
+    Segments containing [QURAN:surah:ayah] tags are rendered with Arabic text
+    in Amiri font and Romanian translation below.
 
     Args:
         srt_path: Path to input SRT file
@@ -337,9 +462,14 @@ def srt_to_ass(srt_path: str | Path, ass_path: str | Path,
             # ASS uses \N for line breaks instead of \n
             text = seg["text"].replace('\n', '\\N')
 
-            # Apply adaptive font size for long segments
-            adaptive = _adaptive_font_size(text)
-            if adaptive is not None:
-                text = f"{{\\fs{adaptive}}}{text}"
+            # Check for Quran verse tag — render with Arabic font
+            quran_formatted = _format_quran_ass(text)
+            if quran_formatted is not None:
+                text = quran_formatted
+            else:
+                # Apply adaptive font size for long segments
+                adaptive = _adaptive_font_size(text)
+                if adaptive is not None:
+                    text = f"{{\\fs{adaptive}}}{text}"
 
             f.write(f"Dialogue: 0,{start},{end},Default,,0,0,0,,{text}\n")
